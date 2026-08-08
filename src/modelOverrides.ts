@@ -24,7 +24,7 @@ export interface ModelMetaOverride {
     defaultReasoningEffort?: string;
     contextLength?: number;
     maxOutputTokens?: number;
-    apiMode?: "openai" | "anthropic";
+    apiMode?: "openai" | "anthropic" | "responses";
     supportsTemperature?: boolean;
     toolCalling?: boolean;
     baseUrl?: string;
@@ -46,6 +46,7 @@ export interface ModelMetaOverride {
  * from its Go counterpart.
  */
 export const MODEL_OVERRIDES: Record<string, ModelMetaOverride> = {
+    "grok-4.5": { apiMode: "responses" },
     // ── MiniMax series ── served via Anthropic-compatible API; M3 is adaptive-only
     "minimax-m3": {
         thinkingMode: "adaptive",

@@ -118,7 +118,7 @@ export abstract class CommonApi<TMessage, TRequestBody> {
      */
     abstract convertMessages(
         messages: readonly LanguageModelChatRequestMessage[],
-        modelConfig: { includeReasoningInRequest: boolean }
+        modelConfig: { includeReasoningInRequest: boolean; vision?: boolean }
     ): Promise<TMessage[]>;
 
     /**

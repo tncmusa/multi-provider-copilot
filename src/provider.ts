@@ -24,6 +24,8 @@ import { countMessageTokens, textTokenLength } from "./provideToken";
 import { updateContextStatusBar, recordUsage, updateCumulativeTooltip, updateStatusBarWithApiPrompt } from "./statusBar";
 import { OpenaiApi } from "./openai/openaiApi";
 import { AnthropicApi } from "./anthropic/anthropicApi";
+import { ResponsesApi } from "./responses/responsesApi";
+import type { ResponsesRequestBody } from "./responses/responsesTypes";
 import type { AnthropicRequestBody } from "./anthropic/anthropicTypes";
 import { CommonApi, type StreamUsage } from "./commonApi";
 import { callVisionModel, callVisionModelMulti } from "./vision/imageProxy";
@@ -396,6 +398,44 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
                     token: token,
                     options: options,
                 });
+            } else if (apiMode === "responses") {
+                const responsesApi = new ResponsesApi(model.id);
+                responsesApi.onUsage = (usage) => {
+                    usageReportedDuringStream = true;
+                    reportNativeUsage(usage, progress);
+                    if (enableThirdPartyIndicator) {
+                        recordUsage(usage);
+                        updateCumulativeTooltip(this.statusBarItem);
+                        updateStatusBarWithApiPrompt(usage.promptTokens, model.maxInputTokens || 128000, this.statusBarItem);
+                    }
+                };
+                const input = await responsesApi.convertMessages(messages, modelConfig);
+                let requestBody: ResponsesRequestBody = {
+                    model: um?.id ?? model.id,
+                    input,
+                    // OpenCode Go's Responses endpoint accepts the JSON response
+                    // form used by the working PowerShell example.
+                    stream: false,
+                };
+                requestBody = responsesApi.prepareRequestBody(requestBody, um, options);
+                const url = `${BASE_URL.replace(/\/+$/, "")}/responses`;
+                logger.debug("request.body", { url, requestBody });
+                const response = await executeWithRetry(async () => {
+                    const res = await dispatchFetch(url, {
+                        method: "POST",
+                        headers: requestHeaders,
+                        body: JSON.stringify(requestBody),
+                        signal: abortController.signal,
+                    });
+                    if (!res.ok) {
+                        const errorText = await res.text();
+                        throw new Error(`Responses API error: [${res.status}] ${res.statusText}${errorText ? `\n${errorText}` : ""}\nURL: ${url}`);
+                    }
+                    return res;
+                }, retryConfig);
+                await responsesApi.processResponse(response, trackingProgress);
+                clearTimeout(timeoutId);
+                await this._handleInterceptedToolCall({ api: responsesApi, apiMode: "responses", model, um, modelApiKey, baseUrl: BASE_URL, dispatchFetch, requestHeaders, retryConfig, abortController, trackingProgress, token, options });
             } else {
                 // OpenAI Chat Completions API mode
                 const openaiApi = new OpenaiApi(model.id);
