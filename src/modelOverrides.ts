@@ -46,7 +46,9 @@ export interface ModelMetaOverride {
  * from its Go counterpart.
  */
 export const MODEL_OVERRIDES: Record<string, ModelMetaOverride> = {
-    "grok-4.5": { apiMode: "responses" },
+    // Grok 4.5 always reasons; the Responses API does not support disabling it.
+    // Keep the catalog effort levels, but hide the "disabled" picker option.
+    "grok-4.5": { apiMode: "responses", thinkingMode: "always" },
     // ── MiniMax series ── served via Anthropic-compatible API; M3 is adaptive-only
     "minimax-m3": {
         thinkingMode: "adaptive",

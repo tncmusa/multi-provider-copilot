@@ -31,7 +31,7 @@
 | **自动模型发现**             | 模型列表以 `models.dev` 目录为唯一数据源（1 分钟 TTL 缓存，兼作启动并发激活去重）。通过 `opencodego.enableAutoModelDiscovery` 配置（默认开启）控制是否从 `/zen/go/v1/models` 获取实际可用列表过滤模型选择器（不可用模型隐藏，API 不可用则显示目录全量）。服务商 URL、模型列表、参数（含 `reasoning_options` 思考强度）均从目录自动获取；API 不可用时目录不可用的降级为空列表，待下次拉取恢复                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | **目录容灾回退**             | 目录获取采用三级回退链：官方 `models.dev`（10 秒超时）→ 镜像（`opencodego.modelsDevMirrorUrl`，默认 `https://modelsdev-mirror.onesoft.top/catalog.json`，30 秒超时，请求头携带 `platform: opencode-go-copilot` 及可选 `x-mirror-token`）→ 硬编码兜底目录快照。镜像/兜底命中时按 1 分钟间隔持续重试官方源，官方恢复后自动切回                                                                                                                                                                                                                                                                                                                                                                                                   |
 | **OpenCode Zen 免费模型**    | 通过设置开关启用，从 `models.dev` 目录的 `opencode` 服务商获取模型列表并过滤出 `-free` 后缀的免费模型，以 `OpenCode Zen` 标识追加到模型选择器。元数据合并链与 Go 模型完全统一：`MODEL_OVERRIDES` > 目录条目 > 保守默认值。支持内存缓存（1 分钟 TTL）                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| **多 API 模式**              | 支持 **OpenAI 兼容格式** (`/chat/completions`)、**Anthropic 格式** (`/v1/messages`) 和 **OpenAI Responses 格式** (`/responses`，当前用于 `grok-4.5`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| **多 API 模式**              | 支持 **OpenAI 兼容格式** (`/chat/completions`)、**Anthropic 格式** (`/v1/messages`) 和 **OpenAI Responses 格式** (`/responses`，当前用于 `grok-4.5`)；Grok 4.5 强制启用 thinking，不提供禁用选项                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | **流式推理**                 | 支持 SSE (Server-Sent Events) 流式响应，实时输出文本和工具调用                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | **Thinking/推理**            | 支持模型的推理过程展示 ("thinking" 状态)，包括 XML think 块解析                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | **工具调用 (Tool Calling)**  | 支持 VS Code 的 LanguageModelToolCallPart 机制                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
@@ -406,6 +406,12 @@ src/
         ├── show-models.nls.zh-cn.md      # 步骤 2 中文版
         ├── advanced-settings.md          # 步骤 3：高级设置
         └── advanced-settings.nls.zh-cn.md# 步骤 3 中文版
+
+scripts/
+├── check-new-models.mjs                # 检查 API 新模型（GitHub Action 消费）
+├── extract-model-features.mjs          # 从 models.dev 提取指定模型的特性报告（含推理规则）
+├── test-vision-history.mjs             # 视觉工具历史编解码闭环测试
+└── update-hardcoded-catalog.mjs        # 刷新硬编码兜底目录快照
 ```
 
 ### 3.2 文件详细说明
@@ -871,6 +877,17 @@ ask_image 工具定义的 OpenAI 格式（`type: "function"`），包含 `imageI
 
 ---
 
+### 4.26 `scripts/extract-model-features.mjs`
+
+从 models.dev 目录提取指定模型的特性报告（默认 `glm-5.1 glm-5.2`，可传任意模型 ID，`--json` 输出机器可读格式）。拉取采用官方 `catalog.json` → 镜像两级回退。输出包含：
+
+- **原始目录条目**：`opencode-go` 服务商专属条目（provider 优先）+ 全局目录条目（`zhipuai/glm-5.1` 等，含 weights/benchmarks）
+- **解析后特性**：与扩展完全一致的推理规则（镜像 `src/modelsDev.ts` / `src/catalogModels.ts`）——思考模式（`reasoning_options` 空 + `reasoning=true` → always，非空 → switchable）、推理强度（effort values，过滤 `none`/`disabled`）、默认强度（最高档，`MODEL_OVERRIDES` 覆盖如 `glm-5.2` → `high`）、视觉、思考预算（`budget_tokens`）、apiMode（`deduceApiModeFromFamily` 同款启发式）、上下文/输出上限、成本等
+
+用法：`node scripts/extract-model-features.mjs glm-5.1 glm-5.2`。
+
+---
+
 ### 4.9 `src/statusBar.ts`
 
 #### `initStatusBar(context): vscode.StatusBarItem`
@@ -1218,6 +1235,9 @@ npm run watch
 
 # 手动刷新硬编码目录快照（发布构建自动执行）
 node scripts/update-hardcoded-catalog.mjs
+
+# 从 models.dev 提取模型特性报告（如 OpenCode Go GLM 5.1/5.2）
+node scripts/extract-model-features.mjs glm-5.1 glm-5.2
 
 # 打包 VSIX
 npm run build

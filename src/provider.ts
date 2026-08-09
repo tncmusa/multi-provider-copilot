@@ -189,6 +189,11 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
                             um.enable_thinking = false;
                             um.include_reasoning_in_request = false;
                             um.reasoning_effort = undefined;
+                        } else {
+                            // Grok 4.5 requires thinking; never send a disabled
+                            // reasoning setting even if an older client requests it.
+                            um.enable_thinking = true;
+                            um.include_reasoning_in_request = true;
                         }
                     } else {
                         um.enable_thinking = true;
