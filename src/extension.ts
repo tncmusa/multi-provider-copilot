@@ -9,7 +9,7 @@ import type { ModelPreset } from "./types";
 import { VersionManager } from "./versionManager";
 import { abortCommitGeneration, generateCommitMsg } from "./gitCommit/commitMessageGenerator";
 import { TokenizerManager } from "./tokenizer/tokenizerManager";
-import { prepareLanguageModelChatInformation, resetAutoDiscoveryState } from "./provideModel";
+import { prepareLanguageModelChatInformation, resetAutoDiscoveryState } from "./openCodeGoModels";
 
 // ---- Walkthrough / Welcome constants ----
 

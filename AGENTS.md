@@ -381,7 +381,7 @@ src/
 ├── catalogModels.ts                      # 统一模型解析/构建层 (Go + Zen)
 ├── hardcodedModelList.ts                 # 硬编码兜底目录快照（官方目录与镜像均不可达时的最后防线）
 ├── modelsDev.ts                          # models.dev 目录拉取与查询
-├── provideModel.ts                       # 模型信息提供函数（目录驱动）
+├── openCodeGoModels.ts                   # 模型信息提供函数（目录驱动）
 ├── openCodeGoProvider.ts                  # OpenCode Go 聊天模型提供商 (核心主文件)
 ├── provideToken.ts                       # Token 计数函数
 ├── statusBar.ts                          # 状态栏管理
@@ -440,7 +440,7 @@ scripts/
 | `apiModelList.ts`                     | ~110 | API 模型列表获取：从 catalog 解析的 base URL 的 `/models` 端点拉取可用模型 ID，1 分钟缓存，静默降级                                                                                                    |
 | `modelsDev.ts`                        | ~440 | models.dev 目录拉取与查询：三级回退链（官方 → 镜像 → 硬编码列表），从 `catalog.json` 下载并索引全局模型与服务商，支持短 ID 匹配、provider 查询、`reasoning_options`/思考模式/视觉/预算推断，1 分钟缓存                                                                                                |
 | `commonApi.ts`                        | ~467 | `CommonApi<TMessage,TRequestBody>` 抽象基类（图片存储、工具调用拦截、User-Agent 配置读取）                                                                                                             |
-| `provideModel.ts`                     | ~180 | 模型信息提供函数：以 catalog 的 `opencode-go` provider 全量构建列表（可选按 API 列表过滤），Zen 免费模型从 `opencode` provider 过滤 `-free`；1 分钟间隔缓存与并发去重                                                                      |
+| `openCodeGoModels.ts`                 | ~180 | 模型信息提供函数：以 catalog 的 `opencode-go` provider 全量构建列表（可选按 API 列表过滤），Zen 免费模型从 `opencode` provider 过滤 `-free`；1 分钟间隔缓存与并发去重                                                                      |
 | `provideToken.ts`                     | ~100 | Token 用量计算                                                                                                                                                                                         |
 | `utils.ts`                            | ~285 | 工具函数 (重试、角色映射、工具转换等)                                                                                                                                                                  |
 | `statusBar.ts`                        | ~140 | 状态栏创建、更新、累计计数器                                                                                                                                                                           |
@@ -849,7 +849,7 @@ API 实现的抽象基类。
 
 ---
 
-### 4.10 `src/provideModel.ts`
+### 4.10 `src/openCodeGoModels.ts`
 
 #### `prepareLanguageModelChatInformation(options, _token, _secrets): Promise<LanguageModelChatInformation[]>`
 获取模型信息列表。模型列表完全由 `models.dev` 目录驱动：`runCatalogPass()` 以 catalog 的 `opencode-go` provider 全量模型构建列表（可选按 API `/models` 列表过滤可用性；API 不可用时显示目录全量），Zen 免费模型由 `fetchZenFreeModelsCached()` 从 `opencode` provider 过滤 `-free` 后缀构建并追加。刷新频率由 `opencodego.modelsDevUpdateInterval` 控制（默认 1 分钟）：该值充当限速器，去重 VS Code 启动时多个并发 `activate()` 调用产生的刷新，同时保证每次激活与超过间隔的模型选择器打开都会刷新。目录不可用（加载失败且无缓存）时返回空列表，待下次拉取恢复。扩展每次激活时由 `extension.ts` 非阻塞调用本函数预热刷新。

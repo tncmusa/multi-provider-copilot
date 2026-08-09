@@ -13,7 +13,7 @@ import type { ModelPreset, OpenCodeGoModelItem } from "./types";
 import { executeWithRetry } from "./utils";
 import { getCatalogProviderBaseUrl } from "./modelsDev";
 
-import { prepareLanguageModelChatInformation } from "./provideModel";
+import { prepareLanguageModelChatInformation } from "./openCodeGoModels";
 import { getCatalogModelConfig, resolveProviderForModelId } from "./catalogModels";
 import { l10nFormat, l10n } from "./localize";
 import { textTokenLength } from "./provideToken";
