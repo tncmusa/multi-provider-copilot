@@ -382,7 +382,7 @@ src/
 ├── hardcodedModelList.ts                 # 硬编码兜底目录快照（官方目录与镜像均不可达时的最后防线）
 ├── modelsDev.ts                          # models.dev 目录拉取与查询
 ├── provideModel.ts                       # 模型信息提供函数（目录驱动）
-├── provider.ts                           # OpenCode Go 聊天模型提供商 (核心主文件)
+├── openCodeGoProvider.ts                  # OpenCode Go 聊天模型提供商 (核心主文件)
 ├── provideToken.ts                       # Token 计数函数
 ├── statusBar.ts                          # 状态栏管理
 ├── types.ts                              # TypeScript 类型定义
@@ -430,7 +430,7 @@ scripts/
 | ------------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `extension.ts`                        | ~230 | 扩展激活/停用，注册 2 个 Provider（OpenCode Go + Cline Pass）和 9 条命令，首次安装欢迎页引导                                                                                                           |
 | `baseProvider.ts`                     | ~470 | 共享聊天提供商基类 `BaseChatModelProvider<TModelItem>`：请求生命周期（超时、取消、重试、Base URL 校验、延迟、API Key 管理、通用错误处理）、`reportNativeUsage`、`getRequestedReasoningEffort`、`_handleInterceptedToolCall`（ask_image 视觉代理多轮循环） |
-| `provider.ts`                         | ~580 | `OpenCodeGoChatModelProvider extends BaseChatModelProvider<OpenCodeGoModelItem>`：模型发现委托、推理/温度选项应用、三路 apiMode 分发（OpenAI/Anthropic/Responses）、状态栏集成、Zen 401/IMAGE_SENSITIVE 错误处理 |
+| `openCodeGoProvider.ts`                | ~580 | `OpenCodeGoChatModelProvider extends BaseChatModelProvider<OpenCodeGoModelItem>`：模型发现委托、推理/温度选项应用、三路 apiMode 分发（OpenAI/Anthropic/Responses）、状态栏集成、Zen 401/IMAGE_SENSITIVE 错误处理 |
 | `clinePassProvider.ts`                | ~230 | `ClinePassChatModelProvider extends BaseChatModelProvider<BaseModelItem>`：Cline Pass 模型发现、推理/温度选项应用、OpenAI Chat Completions 分发、IMAGE_SENSITIVE 错误处理                               |
 | `clinePassModels.ts`                  | ~130 | Cline Pass 模型发现与配置：11 个硬编码模型 ID（`cline-pass/` 前缀），能力复用 OpenCode Go 目录条目，`apiMode` 强制为 `"openai"`，`baseUrl` 为 `https://api.cline.bot/api/v1`                              |
 | `catalogModels.ts`                    | ~230 | 统一模型解析/构建层：`ModelMeta` 合并链（`MODEL_OVERRIDES` > 目录条目 > 默认值）、`buildCatalogModelInfo()`、`getCatalogModelConfig()`、`resolveProviderForModelId()`（`-free` 后缀分流 Zen/Go）           |
@@ -552,7 +552,7 @@ scripts/
 
 ---
 
-### 4.3 `src/provider.ts`
+### 4.3 `src/openCodeGoProvider.ts`
 
 #### `class OpenCodeGoChatModelProvider extends BaseChatModelProvider<OpenCodeGoModelItem>`
 OpenCode Go 核心 Provider 类。根据模型配置路由到 Chat Completions、Anthropic Messages 或 Responses API；`grok-4.5` 通过 Responses API 使用 `/responses` 端点。

@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { OpenCodeGoChatModelProvider } from "./provider";
+import { OpenCodeGoChatModelProvider } from "./openCodeGoProvider";
 import { ClinePassChatModelProvider } from "./clinePassProvider";
 import { initStatusBar } from "./statusBar";
 import { logger } from "./logger";
