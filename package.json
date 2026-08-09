@@ -42,6 +42,11 @@
 				"vendor": "opencodego",
 				"displayName": "%providerDisplayName%",
 				"managementCommand": "opencodego.setApiKey"
+			},
+			{
+				"vendor": "clinepass",
+				"displayName": "%clinepass.providerDisplayName%",
+				"managementCommand": "clinepass.setApiKey"
 			}
 		],
 		"commands": [
@@ -81,6 +86,16 @@
 				"command": "opencodego.updateModelList",
 				"category": "%commandCategory%",
 				"title": "%command.updateModelList%"
+			},
+			{
+				"command": "clinepass.setApiKey",
+				"category": "%clinepass.commandCategory%",
+				"title": "%clinepass.command.setApiKey%"
+			},
+			{
+				"command": "clinepass.getApiKey",
+				"category": "%clinepass.commandCategory%",
+				"title": "%clinepass.command.getApiKey%"
 			}
 		],
 		"walkthroughs": [

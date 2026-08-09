@@ -8,7 +8,7 @@ import {
     Progress,
     CancellationToken,
 } from "vscode";
-import { OpenCodeGoModelItem } from "./types";
+import type { BaseModelItem } from "./baseProvider";
 import { tryParseJSONObject } from "./utils";
 import { VersionManager } from "./versionManager";
 import type { InterceptedToolCall, StoredImage } from "./vision/types";
@@ -129,7 +129,7 @@ export abstract class CommonApi<TMessage, TRequestBody> {
      */
     abstract prepareRequestBody(
         rb: TRequestBody,
-        um: OpenCodeGoModelItem | undefined,
+        um: BaseModelItem | undefined,
         options?: ProvideLanguageModelChatResponseOptions
     ): TRequestBody;
 

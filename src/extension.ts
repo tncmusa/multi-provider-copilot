@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { OpenCodeGoChatModelProvider } from "./provider";
+import { ClinePassChatModelProvider } from "./clinePassProvider";
 import { initStatusBar } from "./statusBar";
 import { logger } from "./logger";
 import { l10n, l10nFormat } from "./localize";
@@ -31,6 +32,10 @@ export function activate(context: vscode.ExtensionContext) {
     // Register the OpenCode Go provider under the vendor id used in package.json
     vscode.lm.registerLanguageModelChatProvider("opencodego", provider);
 
+    // Register the Cline Pass provider under its own vendor id
+    const clinePassProvider = new ClinePassChatModelProvider(context.secrets);
+    vscode.lm.registerLanguageModelChatProvider("clinepass", clinePassProvider);
+
     // Helper: check if an API key is stored (without prompting)
     const hasApiKey = async (): Promise<boolean> => {
         const key = await context.secrets.get("opencodego.apiKey");
@@ -61,6 +66,30 @@ export function activate(context: vscode.ExtensionContext) {
         })
     );
 
+    // Management command to configure Cline Pass API key
+    context.subscriptions.push(
+        vscode.commands.registerCommand("clinepass.setApiKey", async () => {
+            const existing = await context.secrets.get("clinepass.apiKey");
+            const apiKey = await vscode.window.showInputBox({
+                title: l10n("Cline Pass Provider API Key"),
+                prompt: existing ? l10n("Update your Cline Pass API key") : l10n("Enter your Cline Pass API key"),
+                ignoreFocusOut: true,
+                password: true,
+                value: existing ?? "",
+            });
+            if (apiKey === undefined) {
+                return; // user canceled
+            }
+            if (!apiKey.trim()) {
+                await context.secrets.delete("clinepass.apiKey");
+                vscode.window.showInformationMessage(l10n("Cline Pass API key cleared."));
+                return;
+            }
+            await context.secrets.store("clinepass.apiKey", apiKey.trim());
+            vscode.window.showInformationMessage(l10n("Cline Pass API key saved."));
+        })
+    );
+
     // manually trigger model list update command
     context.subscriptions.push(
         vscode.commands.registerCommand("opencodego.updateModelList", async () => {
@@ -80,6 +109,13 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.commands.registerCommand("opencodego.getApiKey", () => {
             vscode.env.openExternal(vscode.Uri.parse("https://opencode.ai/auth"));
+        })
+    );
+
+    // Command to open the Cline Pass website to get an API key
+    context.subscriptions.push(
+        vscode.commands.registerCommand("clinepass.getApiKey", () => {
+            vscode.env.openExternal(vscode.Uri.parse("https://app.cline.bot"));
         })
     );
 

@@ -22,6 +22,8 @@
 
 **OpenCode Go Copilot Provider** 是一个 VS Code 扩展，它将 OpenCode Go 平台的 AI 语言模型集成到 GitHub Copilot Chat 中。用户可以在 VS Code 的 Copilot Chat 界面中选择并使用 OpenCode Go 提供的各种模型（如 DeepSeek、GLM、Qwen、MiMo、MiniMax、Kimi 等系列），享受智能代码补全、聊天对话、Git 提交消息生成等功能。
 
+扩展同时支持 **Cline Pass** 作为第二个独立提供商。Cline Pass 是 Cline 平台的月度订阅服务，通过 OpenAI 兼容的 Chat Completions 端点（`https://api.cline.bot/api/v1`）提供 11 个开源模型（GLM 5.2、Kimi K3/K2.7/K2.6、DeepSeek V4 Pro/Flash、MiniMax M3、MiMo V2.5/V2.5-Pro、Qwen3.7 Max/Plus）。两个提供商共享请求生命周期基础设施（`BaseChatModelProvider`），各自独立注册为 VS Code 语言模型提供商。
+
 ### 1.2 核心能力
 
 | 能力                         | 说明                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
@@ -129,16 +131,21 @@ activate(context)
   ├── logger.init()                         ← 创建 LogOutputChannel
   ├── TokenizerManager.initialize()         ← 加载 o200k_base.tiktoken
   ├── initStatusBar()                       ← 创建状态栏条目
-  ├── new OpenCodeGoChatModelProvider()      ← 创建 Provider 实例
+  ├── new OpenCodeGoChatModelProvider()      ← 创建 OpenCode Go Provider 实例
   ├── vscode.lm.registerLanguageModelChatProvider("opencodego", provider)
+  ├── new ClinePassChatModelProvider()       ← 创建 Cline Pass Provider 实例
+  ├── vscode.lm.registerLanguageModelChatProvider("clinepass", clinePassProvider)
   ├── 预热模型发现 (非阻塞 fire-and-forget)  ← 每次激活刷新模型列表（先 models.dev 后模型列表，1 分钟 TTL 去重并发激活）
   ├── 注册命令:
-  │   ├── opencodego.setApiKey                ← 设置 API Key
+  │   ├── opencodego.setApiKey                ← 设置 OpenCode Go API Key
   │   ├── opencodego.getApiKey                ← 打开 OpenCode AI 官网获取 Key
   │   ├── opencodego.openSettings             ← 打开扩展设置页
   │   ├── opencodego.generateGitCommitMessage ← 生成提交消息
   │   ├── opencodego.abortGitCommitMessage    ← 中止生成
-  │   └── opencodego.setModelPreset           ← 设置模型预设
+  │   ├── opencodego.setModelPreset           ← 设置模型预设
+  │   ├── opencodego.updateModelList          ← 强制刷新模型列表
+  │   ├── clinepass.setApiKey                 ← 设置 Cline Pass API Key
+  │   └── clinepass.getApiKey                 ← 打开 Cline 官网获取 Key
   ├── showWelcomeIfNeeded()                 ← 首次安装时显示欢迎向导
   └── 注册 dispose 清理
 ```
@@ -363,7 +370,10 @@ generateCommitMsg(secrets, scm?)
 ```
 src/
 ├── apiModelList.ts                       # API 模型列表获取
+├── baseProvider.ts                       # 共享聊天提供商基类 (BaseChatModelProvider)
 ├── commonApi.ts                          # API 抽象基类
+├── clinePassModels.ts                    # Cline Pass 模型发现与配置 (11 个硬编码模型)
+├── clinePassProvider.ts                  # Cline Pass 聊天模型提供商
 ├── extension.ts                          # 扩展入口 (activate/deactivate)
 ├── localize.ts                           # 国际化/本地化
 ├── logger.ts                             # 日志系统
@@ -372,7 +382,7 @@ src/
 ├── hardcodedModelList.ts                 # 硬编码兜底目录快照（官方目录与镜像均不可达时的最后防线）
 ├── modelsDev.ts                          # models.dev 目录拉取与查询
 ├── provideModel.ts                       # 模型信息提供函数（目录驱动）
-├── provider.ts                           # Chat 模型提供商 (核心主文件)
+├── provider.ts                           # OpenCode Go 聊天模型提供商 (核心主文件)
 ├── provideToken.ts                       # Token 计数函数
 ├── statusBar.ts                          # 状态栏管理
 ├── types.ts                              # TypeScript 类型定义
@@ -418,12 +428,15 @@ scripts/
 
 | 文件                                  | 行数 | 职责                                                                                                                                                                                                   |
 | ------------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `extension.ts`                        | ~210 | 扩展激活/停用，注册 Provider 和 6 条命令，首次安装欢迎页引导                                                                                                                                           |
-| `provider.ts`                         | ~900 | 实现 `LanguageModelChatProvider`，处理聊天请求全流程及图片代理多轮循环处理                                                                                                                             |
+| `extension.ts`                        | ~230 | 扩展激活/停用，注册 2 个 Provider（OpenCode Go + Cline Pass）和 9 条命令，首次安装欢迎页引导                                                                                                           |
+| `baseProvider.ts`                     | ~470 | 共享聊天提供商基类 `BaseChatModelProvider<TModelItem>`：请求生命周期（超时、取消、重试、Base URL 校验、延迟、API Key 管理、通用错误处理）、`reportNativeUsage`、`getRequestedReasoningEffort`、`_handleInterceptedToolCall`（ask_image 视觉代理多轮循环） |
+| `provider.ts`                         | ~580 | `OpenCodeGoChatModelProvider extends BaseChatModelProvider<OpenCodeGoModelItem>`：模型发现委托、推理/温度选项应用、三路 apiMode 分发（OpenAI/Anthropic/Responses）、状态栏集成、Zen 401/IMAGE_SENSITIVE 错误处理 |
+| `clinePassProvider.ts`                | ~230 | `ClinePassChatModelProvider extends BaseChatModelProvider<BaseModelItem>`：Cline Pass 模型发现、推理/温度选项应用、OpenAI Chat Completions 分发、IMAGE_SENSITIVE 错误处理                               |
+| `clinePassModels.ts`                  | ~130 | Cline Pass 模型发现与配置：11 个硬编码模型 ID（`cline-pass/` 前缀），能力复用 OpenCode Go 目录条目，`apiMode` 强制为 `"openai"`，`baseUrl` 为 `https://api.cline.bot/api/v1`                              |
 | `catalogModels.ts`                    | ~230 | 统一模型解析/构建层：`ModelMeta` 合并链（`MODEL_OVERRIDES` > 目录条目 > 默认值）、`buildCatalogModelInfo()`、`getCatalogModelConfig()`、`resolveProviderForModelId()`（`-free` 后缀分流 Zen/Go）           |
 | `hardcodedModelList.ts`               | ~4880 | 硬编码兜底目录快照：opencode-go（24 个）与 opencode（85 个）模型的完整元数据（2026-08-04），官方目录与镜像均不可达时作为最后防线，与运行时 JSON 相同方式断言为 `HardcodedCatalogData`                             |
 | `modelOverrides.ts`                   | ~50  | 每模型覆盖表 `MODEL_OVERRIDES`（全部可选字段）+ `ModelMetaOverride` 类型；仅维护 models.dev 无法表达的内容（Anthropic apiMode、adaptive、`reasoning_split` 等）                                             |
-| `types.ts`                            | ~95  | `OpenCodeGoModelItem`, `ModelPreset`, `ModelsResponse`, `RetryConfig` 等类型                                                                                                                           |
+| `types.ts`                            | ~95  | `OpenCodeGoModelItem extends BaseModelItem`, `ModelPreset`, `ModelsResponse`, `RetryConfig` 等类型                                                                                                                           |
 | `apiModelList.ts`                     | ~110 | API 模型列表获取：从 catalog 解析的 base URL 的 `/models` 端点拉取可用模型 ID，1 分钟缓存，静默降级                                                                                                    |
 | `modelsDev.ts`                        | ~440 | models.dev 目录拉取与查询：三级回退链（官方 → 镜像 → 硬编码列表），从 `catalog.json` 下载并索引全局模型与服务商，支持短 ID 匹配、provider 查询、`reasoning_options`/思考模式/视觉/预算推断，1 分钟缓存                                                                                                |
 | `commonApi.ts`                        | ~467 | `CommonApi<TMessage,TRequestBody>` 抽象基类（图片存储、工具调用拦截、User-Agent 配置读取）                                                                                                             |
@@ -432,7 +445,7 @@ scripts/
 | `utils.ts`                            | ~285 | 工具函数 (重试、角色映射、工具转换等)                                                                                                                                                                  |
 | `statusBar.ts`                        | ~140 | 状态栏创建、更新、累计计数器                                                                                                                                                                           |
 | `logger.ts`                           | ~55  | 日志输出 (LogOutputChannel)                                                                                                                                                                            |
-| `localize.ts`                         | ~109 | 中英文国际化（含 `low/medium/high/xhigh/max` 思考强度标签）                                                                                                                                            |
+| `localize.ts`                         | ~120 | 中英文国际化（含 `low/medium/high/xhigh/max` 思考强度标签、Cline Pass API Key 提示）                                                                                                                   |
 | `versionManager.ts`                   | ~35  | 扩展版本信息（使用正确扩展 ID `OnesoftQwQ.opencode-go-copilot-provider`）                                                                                                                              |
 | `openai/openaiApi.ts`                 | ~613 | OpenAI 格式 API 实现 (消息转换/请求构建/流式处理/图片代理)                                                                                                                                             |
 | `openai/openaiTypes.ts`               | ~75  | OpenAI 类型定义                                                                                                                                                                                        |
@@ -466,35 +479,154 @@ scripts/
 
 ---
 
-### 4.2 `src/provider.ts`
+### 4.2 `src/baseProvider.ts`
 
-#### `class OpenCodeGoChatModelProvider implements LanguageModelChatProvider`
-核心 Provider 类。根据模型配置路由到 Chat Completions、Anthropic Messages 或 Responses API；`grok-4.5` 通过 Responses API 使用 `/responses` 端点。
+#### `interface BaseModelItem`
+共享模型配置接口，包含所有 API 实现所需的通用字段：`id`、`displayName`、`baseUrl`、`apiMode`、`context_length`、`max_tokens`/`max_completion_tokens`、`vision`、`reasoning_effort`、`enable_thinking`、`thinking_budget`、`thinkingMode`、`temperature`/`top_p`、`supportsTemperature`、`include_reasoning_in_request`、`headers`、`extra`、`delay` 等。`OpenCodeGoModelItem extends BaseModelItem` 添加 OpenCode Go 专有字段。
+
+#### `function reportNativeUsage(usage, progress): void`
+向 Copilot Chat 原生 Token 指示器报告 token 用量。发送 MIME 类型为 `'usage'` 的 `LanguageModelDataPart`（TextEncoder 编码 JSON）。
+
+#### `function getRequestedReasoningEffort(options): string | undefined`
+从 VS Code 选项中提取推理力度。检查 `options.modelConfiguration?.reasoningEffort`，然后 `modelOptions.thinking.type === false` → `"disabled"`，最后 `modelOptions.reasoning_effort`。
+
+#### `interface DispatchChatRequestParams<TModelItem>`
+传递给 `dispatchChatRequest` 的参数：`model`、`config`、`messages`、`options`、`progress`、`token`、`abortController`、`retryConfig`、`dispatchFetch`、`requestHeaders`。
+
+#### `abstract class BaseChatModelProvider<TModelItem extends BaseModelItem> implements LanguageModelChatProvider`
+共享聊天提供商基类。拥有通用请求生命周期：token 计数、超时、取消、重试设置、Base URL 校验、延迟、API Key 管理、通用错误处理、ask_image 视觉代理多轮循环。
 
 | 属性               | 类型             | 说明                           |
 | ------------------ | ---------------- | ------------------------------ |
 | `_lastRequestTime` | `number \| null` | 上次请求完成时间，用于延迟计算 |
 
-#### `constructor(secrets: vscode.SecretStorage, statusBarItem: vscode.StatusBarItem)`
-构造函数，接收密钥存储和状态栏条目。
+#### `constructor(secrets, statusBarItem, apiKeyConfig)`
+构造函数。`apiKeyConfig` 包含 `secretKey`、`title`、`prompt`、`missingMessage`，用于 API Key 存储和提示。
 
-#### `private _createFetchWithTimeout(requestTimeoutMs: number): typeof fetch`
-创建 undici fetch 实例，设置自定义 `bodyTimeout` 防止流式响应中 TCP 空闲连接被提前关闭。回退到全局 `fetch`。
-
-#### `provideLanguageModelChatInformation(options, _token): Promise<LanguageModelChatInformation[]>`
-获取可用的语言模型列表。参数类型为 `PrepareLanguageModelChatModelOptions`，委托给 `prepareLanguageModelChatInformation()`。
+#### `abstract provideLanguageModelChatInformation(options, token): Promise<LanguageModelChatInformation[]>`
+获取可用语言模型列表。由具体子类实现。
 
 #### `provideTokenCount(_model, text, _token): Promise<number>`
 计算文本或消息的 Token 数量。委托给 `countMessageTokens()`。
 
-#### `provideLanguageModelChatResponse(model, messages, options, progress, token): Promise<void>`
-核心方法：处理聊天请求，流式返回响应。包括模型配置获取（统一 `getCatalogModelConfig`，按 `-free` 后缀自动分流 Zen/Go）、API Key 验证、推理力度应用、temperature/top_p 注入（模型预设或自定义设置）、延迟控制、超时管理、API 路由、流式解析、图片代理拦截处理和错误处理。错误处理区分三种情况：用户取消（直接重新抛出原始错误）、超时（友好超时提示）、连接被终止（友好终止提示）。模型配置通过 `{ ...um }` 浅拷贝后再修改 thinking/temperature，防止并发会话间互相泄漏设置。
+#### `abstract protected resolveModelConfig(model): TModelItem | Promise<TModelItem>`
+从 VS Code 模型对象解析提供商特定的模型配置。由具体子类实现。
 
-#### `private async _handleInterceptedToolCall(params): Promise<void>`
-处理图片代理拦截。循环处理最多 `opencodego.visionMaxRounds` 轮（默认 5）。每轮检测 API 实例的 `interceptedToolCall`，发出 thinking 块显示“正在根据图片提问：[问题]”，关闭 thinking 块后视觉模型输出以普通文本流式显示，并立即输出一个 `application/vnd.opencodego.vision-tool-history+json` DataPart 保存调用 ID、参数、视觉结果和 OpenAI 模式所需的 `reasoning_content`。单图调用 `callVisionModel()`，多图调用 `callVisionModelMulti()`，构建本轮 API 请求（追加 assistant tool_call + tool result），注入 VS Code 原生工具 + ask_image（+ ask_with_multi_image 当 >=2 图时）供模型继续使用，保留 temperature/reasoning_effort 等原始参数，DeepSeek 兼容注入 `reasoning_content`。模型不再调用 ask_image/ask_with_multi_image 时退出循环。
+#### `abstract protected applyRequestOptions(config, options): TModelItem`
+应用推理力度和 temperature/top_p。返回浅拷贝。由具体子类实现。
+
+#### `abstract protected dispatchChatRequest(params): Promise<void>`
+将聊天请求分发给提供商后端。基类已设置超时、重试、取消、Base URL 校验、headers 和 API Key。由具体子类实现。
+
+#### `provideLanguageModelChatResponse(model, messages, options, progress, token): Promise<void>`
+核心方法：处理聊天请求的共享生命周期。调用 `resolveModelConfig` → `applyRequestOptions` → `ensureApiKey` → `_validateBaseUrl` → `createRetryConfig` → 超时/取消设置 → `_createFetchWithTimeout` → `_prepareHeaders` → `dispatchChatRequest`。错误由 `_handleRequestError` 统一处理。
+
+#### `protected async ensureApiKey(): Promise<string | undefined>`
+确保 API Key 存在于 SecretStorage 中，缺失时弹出输入框提示用户输入。
+
+#### `protected _prepareHeaders(apiKey, apiMode, customHeaders?): Record<string, string>`
+准备 HTTP 请求头。委托给 `CommonApi.prepareHeaders`。
+
+#### `protected _createFetchWithTimeout(requestTimeoutMs): typeof fetch`
+创建 undici fetch 实例，设置自定义 `bodyTimeout` 防止流式响应中 TCP 空闲连接被提前关闭。回退到全局 `fetch`。
+
+#### `protected _validateBaseUrl(baseUrl): void`
+校验 Base URL：拒绝非 HTTP 协议；`http:` 仅允许 localhost/127.0.0.1/::1/192.168.*/10.*/0.0.0.0/172.16-31.*。
+
+#### `protected _getProviderSpecificErrorMessage(err, modelId): string | undefined`
+钩子方法，子类可覆盖以返回提供商特定的错误消息。默认返回 `undefined`。
+
+#### `protected _handleRequestError(err, token, abortController, requestTimeoutMs, requestStartTime, modelId, messageCount): never`
+分类请求错误并抛出友好的错误消息。区分用户取消（重新抛出原始错误）、超时（友好超时提示）、连接被终止（友好终止提示），然后调用 `_getProviderSpecificErrorMessage` 检查提供商特定错误。
+
+#### `protected async _handleInterceptedToolCall(params): Promise<void>`
+处理图片代理拦截。循环处理最多 `opencodego.visionMaxRounds` 轮（默认 5）。每轮检测 API 实例的 `interceptedToolCall`，发出 thinking 块显示"正在根据图片提问：[问题]"，关闭 thinking 块后视觉模型输出以普通文本流式显示，并立即输出一个 `application/vnd.opencodego.vision-tool-history+json` DataPart 保存调用 ID、参数、视觉结果和 OpenAI 模式所需的 `reasoning_content`。单图调用 `callVisionModel()`，多图调用 `callVisionModelMulti()`，构建本轮 API 请求（追加 assistant tool_call + tool result），注入 VS Code 原生工具 + ask_image（+ ask_with_multi_image 当 >=2 图时）供模型继续使用，保留 temperature/reasoning_effort 等原始参数，DeepSeek 兼容注入 `reasoning_content`。模型不再调用 ask_image/ask_with_multi_image 时退出循环。
 
 - 视觉模型调用期间用户取消则跳过本轮。
 - 每轮创建独立 AbortController，带独立超时。
+- 每轮注入 VS Code 原生工具 + ask_image + ask_with_multi_image，确保模型可以混合使用。
+- Anthropic 模式额外恢复 `system` 内容（`_systemContent`）和 `thinking` 参数。
+- 第二轮及后续轮次请求体中显式设置 `tool_choice` 为 `"auto"`（OpenAI）或 `{ type: "auto" }`（Anthropic），确保模型可继续调用工具。
+- 使用 `_resetStreamState()` 重置流状态，避免 `_completedToolCallIndices` 等状态在轮次间残留导致工具调用被跳过。
+- `thinking` 字段值统一使用字符串（`"enabled"` / `"disabled"`），与 `prepareRequestBody` 保持一致。
+
+---
+
+### 4.3 `src/provider.ts`
+
+#### `class OpenCodeGoChatModelProvider extends BaseChatModelProvider<OpenCodeGoModelItem>`
+OpenCode Go 核心 Provider 类。根据模型配置路由到 Chat Completions、Anthropic Messages 或 Responses API；`grok-4.5` 通过 Responses API 使用 `/responses` 端点。
+
+#### `constructor(secrets: vscode.SecretStorage, statusBarItem: vscode.StatusBarItem)`
+构造函数，接收密钥存储和状态栏条目。调用 `super(secrets, statusBarItem, { secretKey: "opencodego.apiKey", ... })`。
+
+#### `provideLanguageModelChatInformation(options, _token): Promise<LanguageModelChatInformation[]>`
+获取可用的语言模型列表。委托给 `prepareLanguageModelChatInformation()`。
+
+#### `protected resolveModelConfig(model): OpenCodeGoModelItem`
+从 VS Code 模型对象解析 OpenCode Go 模型配置。委托给 `getCatalogModelConfig(model.id)`。
+
+#### `protected applyRequestOptions(baseConfig, options): OpenCodeGoModelItem`
+应用推理力度和 temperature/top_p（模型预设或自定义设置）。返回浅拷贝。
+
+#### `protected async dispatchChatRequest(params): Promise<void>`
+将聊天请求分发给 OpenCode Go 后端。包括状态栏更新、三路 apiMode 分发（OpenAI/Anthropic/Responses）、流式解析、图片代理拦截处理和 fallback token 用量报告。
+
+#### `protected _getProviderSpecificErrorMessage(err, modelId): string | undefined`
+处理 OpenCode Go 特有错误：Zen 免费模型过期（`[401]` + `resolveProviderForModelId === "opencode"`）和图片内容审核拒绝（`IMAGE_SENSITIVE:`）。
+
+---
+
+### 4.3b `src/clinePassProvider.ts`
+
+#### `class ClinePassChatModelProvider extends BaseChatModelProvider<BaseModelItem>`
+Cline Pass Provider 类。通过 OpenAI 兼容的 Chat Completions 端点（`https://api.cline.bot/api/v1`）提供 11 个开源模型。始终使用 `apiMode: "openai"`（无 Anthropic/Responses 端点）。
+
+#### `constructor(secrets: vscode.SecretStorage)`
+构造函数。调用 `super(secrets, undefined, { secretKey: "clinepass.apiKey", ... })`。不使用状态栏（Scope A）。
+
+#### `provideLanguageModelChatInformation(_options, _token): Promise<LanguageModelChatInformation[]>`
+获取可用的 Cline Pass 语言模型列表。委托给 `buildClinePassModelInfos()`（11 个硬编码模型）。
+
+#### `protected async resolveModelConfig(model): Promise<BaseModelItem>`
+从 VS Code 模型对象解析 Cline Pass 模型配置。委托给 `getClinePassModelConfig(model.id)`。
+
+#### `protected applyRequestOptions(baseConfig, options): BaseModelItem`
+应用推理力度和 temperature/top_p（复用 `opencodego.*` 设置命名空间）。返回浅拷贝。
+
+#### `protected async dispatchChatRequest(params): Promise<void>`
+将聊天请求分发给 Cline Pass 后端。使用 `OpenaiApi` 进行消息转换、请求体构建和流式解析。报告原生 token 用量。处理 ask_image 图片代理拦截（复用基类 `_handleInterceptedToolCall`）。
+
+#### `protected _getProviderSpecificErrorMessage(err, modelId): string | undefined`
+处理 Cline Pass 特有错误：图片内容审核拒绝（`IMAGE_SENSITIVE:`）。
+
+---
+
+### 4.3c `src/clinePassModels.ts`
+
+#### `const CLINE_PASS_BASE_URL`
+`"https://api.cline.bot/api/v1"` — Cline Pass API 基础 URL。
+
+#### `const CLINE_PASS_MODELS: Record<string, string>`
+11 个 Cline Pass 模型 ID 到底层 OpenCode Go 目录模型 ID 的映射表。键为 `cline-pass/...`，值为底层模型 ID（如 `glm-5.2`）。
+
+#### `getClinePassModelIds(): string[]`
+返回所有 Cline Pass 模型 ID。
+
+#### `isClinePassModel(modelId): boolean`
+检查模型 ID 是否属于 Cline Pass 提供商。
+
+#### `resolveClinePassUnderlyingId(modelId): string | undefined`
+解析 Cline Pass 模型 ID 对应的底层 OpenCode Go 目录模型 ID。
+
+#### `buildClinePassModelInfo(modelId): LanguageModelChatInformation | undefined`
+构建 Cline Pass 模型的 `LanguageModelChatInformation` 条目。能力（推理枚举、视觉、上下文限制、工具调用）复用 OpenCode Go 目录条目，显示字段（family、detail、tooltip）覆盖为 ClinePass。
+
+#### `async getClinePassModelConfig(modelId): Promise<BaseModelItem | undefined>`
+构建 Cline Pass 模型的请求配置。能力复用 OpenCode Go 目录，但 `apiMode` 强制为 `"openai"`，`baseUrl` 为 Cline Pass 端点，`id` 为完整 `cline-pass/...` slug，不包含 `extra` 参数（如 `reasoning_split` 是 Anthropic 专有）。
+
+#### `async buildClinePassModelInfos(): Promise<LanguageModelChatInformation[]>`
+获取所有 Cline Pass 模型条目用于模型选择器。
 - 每轮注入 VS Code 原生工具 + ask_image + ask_with_multi_image，确保模型可以混合使用。
 - Anthropic 模式额外恢复 `system` 内容（`_systemContent`）和 `thinking` 参数。
 - 第二轮及后续轮次请求体中显式设置 `tool_choice` 为 `"auto"`（OpenAI）或 `{ type: "auto" }`（Anthropic），确保模型可继续调用工具。

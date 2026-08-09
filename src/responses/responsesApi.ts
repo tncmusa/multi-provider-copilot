@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { convertToolsToOpenAI, createDataUrl, isImageMimeType, isResourceLinkMimeType, isToolResultPart, mapRole, parseResourceLinkData, replaceDataUriImages, resolveResourceLinkToImage, storeDataUriImages, collectToolResultText, tryParseJSONObject } from "../utils";
 import { CommonApi } from "../commonApi";
-import type { OpenCodeGoModelItem } from "../types";
+import type { BaseModelItem } from "../baseProvider";
 import type { ResponsesInputContent, ResponsesInputItem, ResponsesRequestBody, ResponsesResponse } from "./responsesTypes";
 import { ASK_IMAGE_TOOL_DEF, ASK_IMAGE_TOOL_NAME, ASK_WITH_MULTI_IMAGE_TOOL_DEF, ASK_WITH_MULTI_IMAGE_TOOL_NAME } from "../vision/types";
 import { parseVisionToolHistoryPart } from "../vision/historyPart";
@@ -77,7 +77,7 @@ export class ResponsesApi extends CommonApi<ResponsesInputItem, ResponsesRequest
         return output;
     }
 
-    prepareRequestBody(body: ResponsesRequestBody, model: OpenCodeGoModelItem | undefined, options?: vscode.ProvideLanguageModelChatResponseOptions): ResponsesRequestBody {
+    prepareRequestBody(body: ResponsesRequestBody, model: BaseModelItem | undefined, options?: vscode.ProvideLanguageModelChatResponseOptions): ResponsesRequestBody {
         if (this._systemContent) body.instructions = this._systemContent;
         if (model?.supportsTemperature !== false && model?.temperature != null) body.temperature = model.temperature;
         if (model?.top_p != null) body.top_p = model.top_p;
