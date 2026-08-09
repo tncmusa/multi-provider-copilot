@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { OpenCodeGoChatModelProvider } from "./openCodeGoProvider";
 import { ClinePassChatModelProvider } from "./clinePassProvider";
+import { OllamaCloudChatModelProvider } from "./ollamaCloudProvider";
 import { initStatusBar } from "./statusBar";
 import { logger } from "./logger";
 import { l10n, l10nFormat } from "./localize";
@@ -35,6 +36,10 @@ export function activate(context: vscode.ExtensionContext) {
     // Register the Cline Pass provider under its own vendor id
     const clinePassProvider = new ClinePassChatModelProvider(context.secrets, tokenCountStatusBarItem);
     vscode.lm.registerLanguageModelChatProvider("clinepass", clinePassProvider);
+
+    // Register the Ollama Cloud provider under its own vendor id
+    const ollamaCloudProvider = new OllamaCloudChatModelProvider(context.secrets, tokenCountStatusBarItem);
+    vscode.lm.registerLanguageModelChatProvider("ollamacloud", ollamaCloudProvider);
 
     // Helper: check if an API key is stored (without prompting)
     const hasApiKey = async (): Promise<boolean> => {
@@ -90,6 +95,30 @@ export function activate(context: vscode.ExtensionContext) {
         })
     );
 
+    // Management command to configure Ollama Cloud API key
+    context.subscriptions.push(
+        vscode.commands.registerCommand("ollamacloud.setApiKey", async () => {
+            const existing = await context.secrets.get("ollamacloud.apiKey");
+            const apiKey = await vscode.window.showInputBox({
+                title: l10n("Ollama Cloud Provider API Key"),
+                prompt: existing ? l10n("Update your Ollama Cloud API key") : l10n("Enter your Ollama Cloud API key"),
+                ignoreFocusOut: true,
+                password: true,
+                value: existing ?? "",
+            });
+            if (apiKey === undefined) {
+                return; // user canceled
+            }
+            if (!apiKey.trim()) {
+                await context.secrets.delete("ollamacloud.apiKey");
+                vscode.window.showInformationMessage(l10n("Ollama Cloud API key cleared."));
+                return;
+            }
+            await context.secrets.store("ollamacloud.apiKey", apiKey.trim());
+            vscode.window.showInformationMessage(l10n("Ollama Cloud API key saved."));
+        })
+    );
+
     // manually trigger model list update command
     context.subscriptions.push(
         vscode.commands.registerCommand("opencodego.updateModelList", async () => {
@@ -116,6 +145,13 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.commands.registerCommand("clinepass.getApiKey", () => {
             vscode.env.openExternal(vscode.Uri.parse("https://app.cline.bot"));
+        })
+    );
+
+    // Command to open the Ollama Cloud website to get an API key
+    context.subscriptions.push(
+        vscode.commands.registerCommand("ollamacloud.getApiKey", () => {
+            vscode.env.openExternal(vscode.Uri.parse("https://ollama.com/settings"));
         })
     );
 

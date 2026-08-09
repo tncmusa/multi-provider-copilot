@@ -47,6 +47,11 @@
 				"vendor": "clinepass",
 				"displayName": "%clinepass.providerDisplayName%",
 				"managementCommand": "clinepass.setApiKey"
+			},
+			{
+				"vendor": "ollamacloud",
+				"displayName": "%ollamacloud.providerDisplayName%",
+				"managementCommand": "ollamacloud.setApiKey"
 			}
 		],
 		"commands": [
@@ -96,6 +101,16 @@
 				"command": "clinepass.getApiKey",
 				"category": "%clinepass.commandCategory%",
 				"title": "%clinepass.command.getApiKey%"
+			},
+			{
+				"command": "ollamacloud.setApiKey",
+				"category": "%ollamacloud.commandCategory%",
+				"title": "%ollamacloud.command.setApiKey%"
+			},
+			{
+				"command": "ollamacloud.getApiKey",
+				"category": "%ollamacloud.commandCategory%",
+				"title": "%ollamacloud.command.getApiKey%"
 			}
 		],
 		"walkthroughs": [
