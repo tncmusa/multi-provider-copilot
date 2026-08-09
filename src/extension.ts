@@ -33,7 +33,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.lm.registerLanguageModelChatProvider("opencodego", provider);
 
     // Register the Cline Pass provider under its own vendor id
-    const clinePassProvider = new ClinePassChatModelProvider(context.secrets);
+    const clinePassProvider = new ClinePassChatModelProvider(context.secrets, tokenCountStatusBarItem);
     vscode.lm.registerLanguageModelChatProvider("clinepass", clinePassProvider);
 
     // Helper: check if an API key is stored (without prompting)

@@ -36,6 +36,7 @@ import {
 import { OpenaiApi } from "./openai/openaiApi";
 import type { StreamUsage } from "./commonApi";
 import { textTokenLength } from "./provideToken";
+import { updateContextStatusBar, recordUsage, updateCumulativeTooltip, updateStatusBarWithApiPrompt } from "./statusBar";
 import { logger } from "./logger";
 import { l10n } from "./localize";
 import {
@@ -54,8 +55,8 @@ export class ClinePassChatModelProvider extends BaseChatModelProvider<BaseModelI
     /**
      * Create a Cline Pass provider using the given secret storage for the API key.
      */
-    constructor(secrets: vscode.SecretStorage) {
-        super(secrets, undefined, {
+    constructor(secrets: vscode.SecretStorage, statusBarItem: vscode.StatusBarItem) {
+        super(secrets, statusBarItem, {
             secretKey: "clinepass.apiKey",
             title: "Cline Pass Provider API Key",
             prompt: "Enter your Cline Pass API key",
@@ -152,11 +153,15 @@ export class ClinePassChatModelProvider extends BaseChatModelProvider<BaseModelI
      */
     protected async dispatchChatRequest(params: DispatchChatRequestParams<BaseModelItem>): Promise<void> {
         const { model, config: um, messages, options, progress, token, abortController, retryConfig, dispatchFetch, requestHeaders } = params;
+        const vscodeConfig = vscode.workspace.getConfiguration();
 
         const modelConfig = {
             includeReasoningInRequest: um.include_reasoning_in_request ?? true,
             vision: um.vision ?? false,
         };
+
+        // Read Advanced Token indicator setting
+        const enableThirdPartyIndicator = vscodeConfig.get<boolean>("opencodego.enableThirdPartyTokenIndicator", true);
 
         let usageReportedDuringStream = false;
         const collectedOutputText: string[] = [];
@@ -176,12 +181,21 @@ export class ClinePassChatModelProvider extends BaseChatModelProvider<BaseModelI
             },
         };
 
+        // Calculate client-side token estimate for fallback (also updates Advanced Token indicator if enabled)
+        const estimatedInputTokens = await updateContextStatusBar(messages, options.tools, model, this.statusBarItem!, modelConfig);
+
         // OpenAI Chat Completions API mode (Cline Pass is always OpenAI-compatible)
         const openaiApi = new OpenaiApi(model.id);
         openaiApi.onUsage = (usage) => {
             usageReportedDuringStream = true;
             // Always report to native Copilot indicator (use original progress, not trackingProgress wrapper)
             reportNativeUsage(usage, progress);
+            // Conditionally update Advanced Token indicator
+            if (enableThirdPartyIndicator) {
+                recordUsage(usage);
+                updateCumulativeTooltip(this.statusBarItem!);
+                updateStatusBarWithApiPrompt(usage.promptTokens, model.maxInputTokens || 128000, this.statusBarItem!);
+            }
         };
         const openaiMessages = await openaiApi.convertMessages(messages, modelConfig);
 
@@ -250,10 +264,14 @@ export class ClinePassChatModelProvider extends BaseChatModelProvider<BaseModelI
             const outputText = collectedOutputText.join("");
             const estimatedOutputTokens = outputText ? await textTokenLength(outputText) : 0;
             const fallbackUsage: StreamUsage = {
-                promptTokens: 0,
+                promptTokens: estimatedInputTokens,
                 completionTokens: estimatedOutputTokens,
             };
             reportNativeUsage(fallbackUsage, progress);
+            if (enableThirdPartyIndicator) {
+                recordUsage(fallbackUsage);
+                updateCumulativeTooltip(this.statusBarItem!);
+            }
         }
     }
 
