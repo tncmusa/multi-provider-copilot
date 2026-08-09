@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import { OpenCodeGoChatModelProvider } from "./openCodeGoProvider";
 import { ClinePassChatModelProvider } from "./clinePassProvider";
 import { OllamaCloudChatModelProvider } from "./ollamaCloudProvider";
+import { NanoGptChatModelProvider } from "./nanoGptProvider";
 import { initStatusBar } from "./statusBar";
 import { logger } from "./logger";
 import { l10n, l10nFormat } from "./localize";
@@ -40,6 +41,10 @@ export function activate(context: vscode.ExtensionContext) {
     // Register the Ollama Cloud provider under its own vendor id
     const ollamaCloudProvider = new OllamaCloudChatModelProvider(context.secrets, tokenCountStatusBarItem);
     vscode.lm.registerLanguageModelChatProvider("ollamacloud", ollamaCloudProvider);
+
+    // Register the NanoGPT Subscription provider under its own vendor id
+    const nanoGptProvider = new NanoGptChatModelProvider(context.secrets, tokenCountStatusBarItem);
+    vscode.lm.registerLanguageModelChatProvider("nanogpt", nanoGptProvider);
 
     // Helper: check if an API key is stored (without prompting)
     const hasApiKey = async (): Promise<boolean> => {
@@ -152,6 +157,37 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.commands.registerCommand("ollamacloud.getApiKey", () => {
             vscode.env.openExternal(vscode.Uri.parse("https://ollama.com/settings"));
+        })
+    );
+
+    // Management command to configure NanoGPT API key
+    context.subscriptions.push(
+        vscode.commands.registerCommand("nanogpt.setApiKey", async () => {
+            const existing = await context.secrets.get("nanogpt.apiKey");
+            const apiKey = await vscode.window.showInputBox({
+                title: l10n("NanoGPT Subscription Provider API Key"),
+                prompt: existing ? l10n("Update your NanoGPT API key") : l10n("Enter your NanoGPT API key"),
+                ignoreFocusOut: true,
+                password: true,
+                value: existing ?? "",
+            });
+            if (apiKey === undefined) {
+                return; // user canceled
+            }
+            if (!apiKey.trim()) {
+                await context.secrets.delete("nanogpt.apiKey");
+                vscode.window.showInformationMessage(l10n("NanoGPT API key cleared."));
+                return;
+            }
+            await context.secrets.store("nanogpt.apiKey", apiKey.trim());
+            vscode.window.showInformationMessage(l10n("NanoGPT API key saved."));
+        })
+    );
+
+    // Command to open the NanoGPT website to get an API key
+    context.subscriptions.push(
+        vscode.commands.registerCommand("nanogpt.getApiKey", () => {
+            vscode.env.openExternal(vscode.Uri.parse("https://nano-gpt.com"));
         })
     );
 

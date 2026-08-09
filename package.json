@@ -52,6 +52,11 @@
 				"vendor": "ollamacloud",
 				"displayName": "%ollamacloud.providerDisplayName%",
 				"managementCommand": "ollamacloud.setApiKey"
+			},
+			{
+				"vendor": "nanogpt",
+				"displayName": "%nanogpt.providerDisplayName%",
+				"managementCommand": "nanogpt.setApiKey"
 			}
 		],
 		"commands": [
@@ -111,6 +116,16 @@
 				"command": "ollamacloud.getApiKey",
 				"category": "%ollamacloud.commandCategory%",
 				"title": "%ollamacloud.command.getApiKey%"
+			},
+			{
+				"command": "nanogpt.setApiKey",
+				"category": "%nanogpt.commandCategory%",
+				"title": "%nanogpt.command.setApiKey%"
+			},
+			{
+				"command": "nanogpt.getApiKey",
+				"category": "%nanogpt.commandCategory%",
+				"title": "%nanogpt.command.getApiKey%"
 			}
 		],
 		"walkthroughs": [
