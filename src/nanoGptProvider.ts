@@ -99,9 +99,11 @@ export class NanoGptChatModelProvider extends BaseChatModelProvider<BaseModelIte
         if (effort) {
             if (effort === "disabled") {
                 if (um.thinkingMode !== "always") {
-                    um.enable_thinking = false;
+                    // NanoGPT uses reasoning_effort: "none" to disable reasoning.
+                    // Keep enable_thinking=true so prepareRequestBody sends the field.
+                    um.enable_thinking = true;
                     um.include_reasoning_in_request = false;
-                    um.reasoning_effort = undefined;
+                    um.reasoning_effort = "none";
                 } else {
                     um.enable_thinking = true;
                     um.include_reasoning_in_request = true;

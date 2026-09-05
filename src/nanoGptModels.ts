@@ -7,24 +7,24 @@
  *
  * Model IDs follow the `provider/model` format (e.g. `google/gemma-4-12b-it`,
  * `openai/gpt-5.2`). Thinking/reasoning variants use a `:thinking` suffix
- * (e.g. `anthropic/claude-opus-4.6:thinking`).
+ * (e.g. `deepseek/deepseek-v4-pro:thinking`).
  *
- * Capabilities (vision, reasoning, context length, thinking mode) are resolved
- * from the models.dev catalog when a matching entry exists, falling back to
- * conservative defaults for unmatched models.
+ * ALL model metadata (capabilities, context length, reasoning efforts, vision,
+ * tool calling) comes exclusively from NanoGPT's own API:
+ *   GET /api/subscription/v1/models?detailed=true
+ *
+ * This is the single source of truth — no models.dev catalog fallback.
  *
  * Key differences from OpenCode Go:
  * - Base URL: https://nano-gpt.com/api/subscription/v1 (vs opencode.ai/zen/go/v1/)
  * - API mode: always "openai" (NanoGPT is OpenAI-compatible only)
  * - Model ID sent to API: stripped of `nanogpt/` prefix
- * - Model list: fetched dynamically from GET /api/subscription/v1/models
+ * - Model list + capabilities: fetched from NanoGPT API directly
  * - No `extra` request body parameters
  */
 
 import type { LanguageModelChatInformation } from "vscode";
 import type { BaseModelItem } from "./baseProvider";
-import { buildCatalogModelInfo, resolveModelMeta, type ProviderId } from "./catalogModels";
-import { ensureModelsDevLoaded, lookupModelDevEntry, type ModelsDevEntry } from "./modelsDev";
 import { logger } from "./logger";
 
 /** NanoGPT Subscription API base URL. */
@@ -36,9 +36,50 @@ const NANOGPT_PREFIX = "nanogpt/";
 /** Cache TTL for the model list (1 minute). */
 const CACHE_TTL_MS = 60 * 1000;
 
+// ── Types for the NanoGPT detailed models API ──
+
+/** Capabilities block from the NanoGPT detailed models response. */
+interface NanoGptCapabilities {
+    vision: boolean;
+    reasoning: boolean;
+    tool_calling: boolean;
+    parallel_tool_calls: boolean;
+    structured_output: boolean;
+    pdf_upload: boolean;
+}
+
+/** A single model entry from NanoGPT's ?detailed=true response. */
+interface NanoGptModelEntry {
+    id: string;
+    object: string;
+    created: number;
+    owned_by: string;
+    name?: string;
+    description?: string;
+    context_length: number;
+    max_output_tokens: number | null;
+    capabilities: NanoGptCapabilities;
+    /** Optional reasoning effort levels (e.g. ["none","low","medium","high","xhigh"]) */
+    reasoning_efforts?: string[];
+    pricing?: {
+        prompt: number;
+        completion: number;
+        currency: string;
+        unit: string;
+    };
+}
+
+/** Top-level response from NanoGPT's /models?detailed=true endpoint. */
+interface NanoGptModelsResponse {
+    object: string;
+    data: NanoGptModelEntry[];
+}
+
 // ── Module-level cache ──
-let cachedModelIds: string[] | null = null;
+let cachedEntries: NanoGptModelEntry[] | null = null;
 let cacheTimestamp = 0;
+
+// ── Model ID helpers ──
 
 /**
  * Strip the `nanogpt/` prefix from a model ID to get the API-level model ID.
@@ -64,19 +105,36 @@ export function isNanoGptModel(modelId: string): boolean {
     return modelId.startsWith(NANOGPT_PREFIX);
 }
 
+// ── Model ID filtering ──
+
+/** Model IDs to exclude from the picker (internal/helper models). */
+const EXCLUDED_MODEL_IDS = new Set([
+    "nano-gpt-help",
+    "auto-model",
+    "auto-model-basic",
+    "auto-model-standard",
+    "auto-model-premium",
+]);
+
 /**
- * Fetch the list of subscription-included model IDs from the NanoGPT API.
+ * Fetch the detailed model list from the NanoGPT subscription API.
  * Returns an empty array on failure (silent degradation).
  */
-async function fetchNanoGptModelIds(): Promise<string[]> {
-    const url = `${NANOGPT_BASE_URL}/models`;
+async function fetchNanoGptModels(): Promise<NanoGptModelEntry[]> {
+    const url = `${NANOGPT_BASE_URL}/models?detailed=true`;
     try {
-        const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
+        const response = await fetch(url, { signal: AbortSignal.timeout(15000) });
         if (!response.ok) {
             throw new Error(`NanoGPT model list error: [${response.status}] ${response.statusText}`);
         }
-        const body = (await response.json()) as { data?: Array<{ id: string }> };
-        return (body.data ?? []).map((m) => m.id);
+        const body = (await response.json()) as NanoGptModelsResponse;
+        const entries = (body.data ?? []).filter((m) => !EXCLUDED_MODEL_IDS.has(m.id));
+        logger.info("nanogpt.models.fetch", {
+            url,
+            totalCount: body.data?.length ?? 0,
+            filteredCount: entries.length,
+        });
+        return entries;
     } catch (err) {
         if (err instanceof DOMException && err.name === "AbortError") {
             logger.warn("nanogpt.models.fetch.timeout", { url });
@@ -91,132 +149,219 @@ async function fetchNanoGptModelIds(): Promise<string[]> {
 }
 
 /**
- * Get the list of NanoGPT subscription model IDs with 1-minute caching.
+ * Get the detailed NanoGPT model list with 1-minute caching.
  */
-async function getNanoGptModelIds(): Promise<string[]> {
+async function getNanoGptModels(): Promise<NanoGptModelEntry[]> {
     const now = Date.now();
-    if (cachedModelIds !== null && now - cacheTimestamp < CACHE_TTL_MS) {
-        return cachedModelIds;
+    if (cachedEntries !== null && now - cacheTimestamp < CACHE_TTL_MS) {
+        return cachedEntries;
     }
 
-    const ids = await fetchNanoGptModelIds();
-    if (ids.length > 0) {
-        cachedModelIds = ids;
+    const entries = await fetchNanoGptModels();
+    if (entries.length > 0) {
+        cachedEntries = entries;
         cacheTimestamp = now;
     }
-    // On failure, return stale cache if available, otherwise empty
-    return ids.length > 0 ? ids : (cachedModelIds ?? []);
+    return entries.length > 0 ? entries : (cachedEntries ?? []);
 }
 
 /**
  * Clear the cached model list (for forced refresh).
  */
 export function clearNanoGptModelCache(): void {
-    cachedModelIds = null;
+    cachedEntries = null;
     cacheTimestamp = 0;
 }
 
-/**
- * Try to find a matching models.dev catalog entry for a NanoGPT model ID.
- *
- * NanoGPT uses `provider/model` format (e.g. `google/gemma-4-12b-it`).
- * models.dev uses the same format for global entries. We try:
- * 1. Exact match in the global catalog
- * 2. Strip `:thinking` suffix and try again
- */
-function findCatalogEntry(apiModelId: string): { entry: ModelsDevEntry | undefined; baseId: string } {
-    // Try exact match first
-    const exact = lookupModelDevEntry(apiModelId);
-    if (exact) {
-        return { entry: exact, baseId: apiModelId };
-    }
+// ── Reasoning effort label helpers ──
 
-    // Try without :thinking suffix
-    if (apiModelId.endsWith(":thinking")) {
-        const baseId = apiModelId.slice(0, -":thinking".length);
-        const base = lookupModelDevEntry(baseId);
-        if (base) {
-            return { entry: base, baseId };
-        }
+/** Map reasoning effort values to display labels. */
+function reasoningEffortLabel(effort: string): string {
+    switch (effort) {
+        case "none": return "Disabled";
+        case "minimal": return "Minimal";
+        case "low": return "Low";
+        case "medium": return "Medium";
+        case "high": return "High";
+        case "xhigh": return "Extra High";
+        case "max": return "Maximum";
+        default: return effort.charAt(0).toUpperCase() + effort.slice(1);
     }
+}
 
-    return { entry: undefined, baseId: apiModelId };
+/** Map reasoning effort values to descriptions. */
+function reasoningEffortDescription(effort: string): string {
+    switch (effort) {
+        case "none": return "Do not enable thinking";
+        case "minimal": return "Minimal reasoning depth";
+        case "low": return "Reduce thinking, faster response";
+        case "medium": return "Balance thinking and speed";
+        case "high": return "Deeper thinking, slower response";
+        case "xhigh": return "Very deep thinking, slower response";
+        case "max": return "Maximum thinking depth, slowest response";
+        default: return effort;
+    }
 }
 
 /**
- * Conservative default capabilities for models not found in the catalog.
- */
-const CONSERVATIVE_DEFAULTS = {
-    contextLength: 128000,
-    maxOutputTokens: 4096,
-    vision: false,
-    toolCalling: true,
-    supportsTemperature: true,
-};
-
-/**
- * Build a LanguageModelChatInformation entry for a NanoGPT model.
+ * Build the reasoning effort enum for a model from its NanoGPT capabilities.
  *
- * Capabilities are resolved from the models.dev catalog when a matching
- * entry exists, falling back to conservative defaults.
+ * Rules:
+ * - If the model has `reasoning_efforts` array, use those values directly.
+ * - If the model has `capabilities.reasoning: true` but no explicit efforts,
+ *   provide a simple "disabled"/"enabled" toggle.
+ * - If the model has `capabilities.reasoning: false`, only "disabled" is available.
+ * - `:thinking` suffix models default to thinking enabled.
  */
-function buildNanoGptModelInfo(apiModelId: string): LanguageModelChatInformation | undefined {
-    const prefixedId = addNanoGptPrefix(apiModelId);
-    const { entry, baseId } = findCatalogEntry(apiModelId);
+function buildReasoningEnum(entry: NanoGptModelEntry): {
+    enumValues: string[];
+    enumItemLabels: string[];
+    enumDescriptions: string[];
+    defaultEffort: string;
+} {
+    const isThinkingSuffix = entry.id.endsWith(":thinking");
+    const hasReasoning = entry.capabilities.reasoning;
 
-    if (entry) {
-        // Found in catalog — reuse the full capability resolution
-        // Determine which provider to use for catalog lookup
-        const info = buildCatalogModelInfo("opencode-go", baseId);
-        if (info) {
-            return {
-                ...info,
-                id: prefixedId,
-                family: "NanoGPT",
-                detail: "NanoGPT",
-                tooltip: "NanoGPT Subscription",
-            };
-        }
+    // If the API provides explicit reasoning_efforts, use them
+    if (entry.reasoning_efforts && entry.reasoning_efforts.length > 0) {
+        const efforts = entry.reasoning_efforts;
+        const hasNone = efforts.includes("none");
+
+        // Build enum: "disabled" maps to "none" if present, otherwise add "disabled" at front
+        const enumValues = hasNone
+            ? efforts.map((e) => e === "none" ? "disabled" : e)
+            : ["disabled", ...efforts];
+
+        const defaultEffort = isThinkingSuffix
+            ? (efforts.find((e) => e !== "none") ?? efforts[efforts.length - 1])
+            : "disabled";
+
+        return {
+            enumValues,
+            enumItemLabels: enumValues.map(reasoningEffortLabel),
+            enumDescriptions: enumValues.map(reasoningEffortDescription),
+            defaultEffort,
+        };
     }
 
-    // Not in catalog — build with conservative defaults
-    const isThinking = apiModelId.endsWith(":thinking");
-    const displayBase = apiModelId.replace(/:thinking$/, "");
-    const displayName = displayBase
-        .split("/")
-        .pop()
-        ?.replace(/-/g, " ")
-        .replace(/\b\w/g, (c) => c.toUpperCase()) ?? apiModelId;
+    // No explicit efforts — use simple toggle based on reasoning capability
+    if (hasReasoning) {
+        return {
+            enumValues: ["disabled", "enabled"],
+            enumItemLabels: ["Disabled", "Thinking"],
+            enumDescriptions: ["Do not enable thinking", "Enable thinking"],
+            defaultEffort: isThinkingSuffix ? "enabled" : "disabled",
+        };
+    }
+
+    // No reasoning at all
+    return {
+        enumValues: ["disabled"],
+        enumItemLabels: ["Disabled"],
+        enumDescriptions: ["Do not enable thinking"],
+        defaultEffort: "disabled",
+    };
+}
+
+// ── Model info / config builders ──
+
+/**
+ * Build a LanguageModelChatInformation entry from a NanoGPT model entry.
+ */
+function buildNanoGptModelInfo(entry: NanoGptModelEntry): LanguageModelChatInformation {
+    const prefixedId = addNanoGptPrefix(entry.id);
+    const reasoningEnum = buildReasoningEnum(entry);
+    const displayName = entry.name ?? entry.id;
 
     return {
         id: prefixedId,
-        name: `${displayName}${isThinking ? " (Thinking)" : ""}`,
+        name: displayName,
         family: "NanoGPT",
         version: "1.0",
         detail: "NanoGPT",
         tooltip: "NanoGPT Subscription",
-        maxInputTokens: CONSERVATIVE_DEFAULTS.contextLength,
-        maxOutputTokens: CONSERVATIVE_DEFAULTS.maxOutputTokens,
+        maxInputTokens: entry.context_length || 128000,
+        maxOutputTokens: entry.max_output_tokens || 4096,
+        isUserSelectable: true,
         capabilities: {
-            toolCalling: CONSERVATIVE_DEFAULTS.toolCalling,
-            vision: CONSERVATIVE_DEFAULTS.vision,
+            toolCalling: entry.capabilities.tool_calling,
+            // Always declare imageInput=true so VS Code passes image data through.
+            // Non-vision models handle images via the ask_image tool proxy internally.
+            imageInput: true,
         },
-        reasoningEffort: {
-            enumValues: isThinking ? ["disabled", "enabled"] : ["disabled"],
-            enumItemLabels: isThinking ? ["Disabled", "Thinking"] : ["Disabled"],
-            enumDescriptions: isThinking
-                ? ["Do not enable thinking", "Enable thinking"]
-                : ["Do not enable thinking"],
-            defaultEffort: isThinking ? "enabled" : "disabled",
+        configurationSchema: {
+            properties: {
+                reasoningEffort: {
+                    type: "string",
+                    title: "Reasoning Effort",
+                    enum: reasoningEnum.enumValues,
+                    enumItemLabels: reasoningEnum.enumItemLabels,
+                    enumDescriptions: reasoningEnum.enumDescriptions,
+                    default: reasoningEnum.defaultEffort,
+                    group: "navigation",
+                },
+            },
         },
-    } as LanguageModelChatInformation;
+    } satisfies LanguageModelChatInformation;
 }
 
 /**
- * Build the BaseModelItem request config for a NanoGPT model.
- *
- * Capabilities are resolved from the models.dev catalog when available,
- * falling back to conservative defaults.
+ * Build the BaseModelItem request config from a NanoGPT model entry.
+ */
+function buildNanoGptModelConfig(entry: NanoGptModelEntry): BaseModelItem {
+    const isThinkingSuffix = entry.id.endsWith(":thinking");
+    const hasReasoning = entry.capabilities.reasoning;
+
+    // Determine thinking mode:
+    // - "switchable" if the model has reasoning_efforts including "none"
+    //   (user can turn it off via the picker)
+    // - "always" only if reasoning is on AND there's no "none" option
+    //   (e.g. a :thinking model that cannot be disabled)
+    let thinkingMode: BaseModelItem["thinkingMode"] = "switchable";
+    const canDisable = entry.reasoning_efforts?.includes("none") ?? false;
+    if (hasReasoning && isThinkingSuffix && !canDisable) {
+        thinkingMode = "always";
+    }
+
+    // Determine default reasoning effort:
+    // - :thinking models default to the first non-"none" effort
+    // - non-:thinking models default to "none" (disabled)
+    let defaultEffort: string | undefined;
+    if (hasReasoning && entry.reasoning_efforts && entry.reasoning_efforts.length > 0) {
+        if (isThinkingSuffix) {
+            const nonNone = entry.reasoning_efforts.find((e) => e !== "none");
+            if (nonNone) {
+                defaultEffort = nonNone;
+            }
+        } else {
+            // Non-:thinking model with reasoning capability: default to "none"
+            defaultEffort = "none";
+        }
+    }
+
+    const config: BaseModelItem = {
+        id: entry.id, // API-level ID (without nanogpt/ prefix)
+        displayName: entry.name ?? entry.id,
+        baseUrl: NANOGPT_BASE_URL,
+        apiMode: "openai",
+        context_length: entry.context_length || 128000,
+        max_completion_tokens: entry.max_output_tokens || 4096,
+        vision: entry.capabilities.vision,
+        enable_thinking: isThinkingSuffix,
+        include_reasoning_in_request: isThinkingSuffix,
+        supportsTemperature: true,
+        thinkingMode,
+    };
+
+    if (defaultEffort) {
+        config.reasoning_effort = defaultEffort;
+    }
+
+    return config;
+}
+
+/**
+ * Build the BaseModelItem request config for a NanoGPT model by its VS Code model ID.
  */
 export async function getNanoGptModelConfig(modelId: string): Promise<BaseModelItem | undefined> {
     if (!isNanoGptModel(modelId)) {
@@ -224,81 +369,32 @@ export async function getNanoGptModelConfig(modelId: string): Promise<BaseModelI
     }
 
     const apiModelId = stripNanoGptPrefix(modelId);
-    const { entry, baseId } = findCatalogEntry(apiModelId);
-
-    await ensureModelsDevLoaded();
-
-    if (entry) {
-        // Use catalog metadata via the merge chain
-        const meta = resolveModelMeta("opencode-go", baseId);
-
-        const isThinking = apiModelId.endsWith(":thinking");
-        const config: BaseModelItem = {
-            id: apiModelId, // API-level ID (without nanogpt/ prefix)
-            displayName: meta.displayName,
-            baseUrl: NANOGPT_BASE_URL,
-            apiMode: "openai",
-            context_length: meta.contextLength,
-            max_completion_tokens: meta.maxOutputTokens,
-            vision: meta.vision,
-            enable_thinking: isThinking,
-            include_reasoning_in_request: isThinking,
-            supportsTemperature: meta.supportsTemperature,
-            thinkingMode: isThinking ? meta.thinkingMode : "switchable",
-        };
-
-        if (isThinking && meta.defaultReasoningEffort && meta.defaultReasoningEffort !== "enabled" && meta.defaultReasoningEffort !== "adaptive") {
-            config.reasoning_effort = meta.defaultReasoningEffort;
-        }
-        if (meta.thinkingBudget?.max !== undefined) {
-            config.thinking_budget = meta.thinkingBudget.max;
-        }
-
-        return config;
+    const entries = await getNanoGptModels();
+    const entry = entries.find((e) => e.id === apiModelId);
+    if (!entry) {
+        logger.warn("nanogpt.model.not-found", { modelId, apiModelId });
+        return undefined;
     }
 
-    // Conservative defaults for unmatched models
-    const isThinking = apiModelId.endsWith(":thinking");
-    const config: BaseModelItem = {
-        id: apiModelId,
-        displayName: apiModelId,
-        baseUrl: NANOGPT_BASE_URL,
-        apiMode: "openai",
-        context_length: CONSERVATIVE_DEFAULTS.contextLength,
-        max_completion_tokens: CONSERVATIVE_DEFAULTS.maxOutputTokens,
-        vision: CONSERVATIVE_DEFAULTS.vision,
-        enable_thinking: isThinking,
-        include_reasoning_in_request: isThinking,
-        supportsTemperature: CONSERVATIVE_DEFAULTS.supportsTemperature,
-        thinkingMode: isThinking ? "switchable" : "switchable",
-    };
-
-    return config;
+    return buildNanoGptModelConfig(entry);
 }
 
 /**
  * Get all NanoGPT model entries for the model picker.
- * Fetches the model list from the API with 1-minute caching.
+ * Fetches the detailed model list from the NanoGPT API with 1-minute caching.
  */
 export async function buildNanoGptModelInfos(): Promise<LanguageModelChatInformation[]> {
-    const apiModelIds = await getNanoGptModelIds();
-    if (apiModelIds.length === 0) {
+    const entries = await getNanoGptModels();
+    if (entries.length === 0) {
         logger.warn("nanogpt.models.empty", {});
         return [];
     }
 
-    const infos: LanguageModelChatInformation[] = [];
-    for (const apiId of apiModelIds) {
-        const info = buildNanoGptModelInfo(apiId);
-        if (info) {
-            infos.push(info);
-        }
-    }
+    const infos = entries.map(buildNanoGptModelInfo);
 
     logger.info("nanogpt.models.discovery", {
         action: "loaded",
         count: infos.length,
-        ids: infos.map((i) => i.id).join(", "),
     });
 
     return infos;
