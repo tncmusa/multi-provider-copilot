@@ -7,7 +7,7 @@ import {
 	Progress,
 } from "vscode";
 
-import type { OpenCodeGoModelItem } from "../types";
+import type { BaseModelItem } from "../baseProvider";
 
 import type {
 	AnthropicMessage,
@@ -312,7 +312,7 @@ export class AnthropicApi extends CommonApi<AnthropicMessage, AnthropicRequestBo
 
 	prepareRequestBody(
 		rb: AnthropicRequestBody,
-		um: OpenCodeGoModelItem | undefined,
+		um: BaseModelItem | undefined,
 		options?: ProvideLanguageModelChatResponseOptions
 	): AnthropicRequestBody {
 		// Set max_tokens (required for Anthropic)
@@ -602,7 +602,7 @@ export class AnthropicApi extends CommonApi<AnthropicMessage, AnthropicRequestBo
 	 * Create a non-streaming chat message (for Git commit generation).
 	 */
 	async *createMessage(
-		model: OpenCodeGoModelItem,
+		model: BaseModelItem,
 		systemPrompt: string,
 		messages: { role: string; content: string }[],
 		baseUrl: string,

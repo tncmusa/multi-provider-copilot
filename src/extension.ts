@@ -1,5 +1,8 @@
 import * as vscode from "vscode";
-import { OpenCodeGoChatModelProvider } from "./provider";
+import { OpenCodeGoChatModelProvider } from "./openCodeGoProvider";
+import { ClinePassChatModelProvider } from "./clinePassProvider";
+import { OllamaCloudChatModelProvider } from "./ollamaCloudProvider";
+import { NanoGptChatModelProvider } from "./nanoGptProvider";
 import { initStatusBar } from "./statusBar";
 import { logger } from "./logger";
 import { l10n, l10nFormat } from "./localize";
@@ -7,7 +10,7 @@ import type { ModelPreset } from "./types";
 import { VersionManager } from "./versionManager";
 import { abortCommitGeneration, generateCommitMsg } from "./gitCommit/commitMessageGenerator";
 import { TokenizerManager } from "./tokenizer/tokenizerManager";
-import { prepareLanguageModelChatInformation, resetAutoDiscoveryState } from "./provideModel";
+import { prepareLanguageModelChatInformation, resetAutoDiscoveryState } from "./openCodeGoModels";
 
 // ---- Walkthrough / Welcome constants ----
 
@@ -30,6 +33,18 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Register the OpenCode Go provider under the vendor id used in package.json
     vscode.lm.registerLanguageModelChatProvider("opencodego", provider);
+
+    // Register the Cline Pass provider under its own vendor id
+    const clinePassProvider = new ClinePassChatModelProvider(context.secrets, tokenCountStatusBarItem);
+    vscode.lm.registerLanguageModelChatProvider("clinepass", clinePassProvider);
+
+    // Register the Ollama Cloud provider under its own vendor id
+    const ollamaCloudProvider = new OllamaCloudChatModelProvider(context.secrets, tokenCountStatusBarItem);
+    vscode.lm.registerLanguageModelChatProvider("ollamacloud", ollamaCloudProvider);
+
+    // Register the NanoGPT Subscription provider under its own vendor id
+    const nanoGptProvider = new NanoGptChatModelProvider(context.secrets, tokenCountStatusBarItem);
+    vscode.lm.registerLanguageModelChatProvider("nanogpt", nanoGptProvider);
 
     // Helper: check if an API key is stored (without prompting)
     const hasApiKey = async (): Promise<boolean> => {
@@ -61,6 +76,54 @@ export function activate(context: vscode.ExtensionContext) {
         })
     );
 
+    // Management command to configure Cline Pass API key
+    context.subscriptions.push(
+        vscode.commands.registerCommand("clinepass.setApiKey", async () => {
+            const existing = await context.secrets.get("clinepass.apiKey");
+            const apiKey = await vscode.window.showInputBox({
+                title: l10n("Cline Pass Provider API Key"),
+                prompt: existing ? l10n("Update your Cline Pass API key") : l10n("Enter your Cline Pass API key"),
+                ignoreFocusOut: true,
+                password: true,
+                value: existing ?? "",
+            });
+            if (apiKey === undefined) {
+                return; // user canceled
+            }
+            if (!apiKey.trim()) {
+                await context.secrets.delete("clinepass.apiKey");
+                vscode.window.showInformationMessage(l10n("Cline Pass API key cleared."));
+                return;
+            }
+            await context.secrets.store("clinepass.apiKey", apiKey.trim());
+            vscode.window.showInformationMessage(l10n("Cline Pass API key saved."));
+        })
+    );
+
+    // Management command to configure Ollama Cloud API key
+    context.subscriptions.push(
+        vscode.commands.registerCommand("ollamacloud.setApiKey", async () => {
+            const existing = await context.secrets.get("ollamacloud.apiKey");
+            const apiKey = await vscode.window.showInputBox({
+                title: l10n("Ollama Cloud Provider API Key"),
+                prompt: existing ? l10n("Update your Ollama Cloud API key") : l10n("Enter your Ollama Cloud API key"),
+                ignoreFocusOut: true,
+                password: true,
+                value: existing ?? "",
+            });
+            if (apiKey === undefined) {
+                return; // user canceled
+            }
+            if (!apiKey.trim()) {
+                await context.secrets.delete("ollamacloud.apiKey");
+                vscode.window.showInformationMessage(l10n("Ollama Cloud API key cleared."));
+                return;
+            }
+            await context.secrets.store("ollamacloud.apiKey", apiKey.trim());
+            vscode.window.showInformationMessage(l10n("Ollama Cloud API key saved."));
+        })
+    );
+
     // manually trigger model list update command
     context.subscriptions.push(
         vscode.commands.registerCommand("opencodego.updateModelList", async () => {
@@ -80,6 +143,51 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.commands.registerCommand("opencodego.getApiKey", () => {
             vscode.env.openExternal(vscode.Uri.parse("https://opencode.ai/auth"));
+        })
+    );
+
+    // Command to open the Cline Pass website to get an API key
+    context.subscriptions.push(
+        vscode.commands.registerCommand("clinepass.getApiKey", () => {
+            vscode.env.openExternal(vscode.Uri.parse("https://app.cline.bot"));
+        })
+    );
+
+    // Command to open the Ollama Cloud website to get an API key
+    context.subscriptions.push(
+        vscode.commands.registerCommand("ollamacloud.getApiKey", () => {
+            vscode.env.openExternal(vscode.Uri.parse("https://ollama.com/settings"));
+        })
+    );
+
+    // Management command to configure NanoGPT API key
+    context.subscriptions.push(
+        vscode.commands.registerCommand("nanogpt.setApiKey", async () => {
+            const existing = await context.secrets.get("nanogpt.apiKey");
+            const apiKey = await vscode.window.showInputBox({
+                title: l10n("NanoGPT Subscription Provider API Key"),
+                prompt: existing ? l10n("Update your NanoGPT API key") : l10n("Enter your NanoGPT API key"),
+                ignoreFocusOut: true,
+                password: true,
+                value: existing ?? "",
+            });
+            if (apiKey === undefined) {
+                return; // user canceled
+            }
+            if (!apiKey.trim()) {
+                await context.secrets.delete("nanogpt.apiKey");
+                vscode.window.showInformationMessage(l10n("NanoGPT API key cleared."));
+                return;
+            }
+            await context.secrets.store("nanogpt.apiKey", apiKey.trim());
+            vscode.window.showInformationMessage(l10n("NanoGPT API key saved."));
+        })
+    );
+
+    // Command to open the NanoGPT website to get an API key
+    context.subscriptions.push(
+        vscode.commands.registerCommand("nanogpt.getApiKey", () => {
+            vscode.env.openExternal(vscode.Uri.parse("https://nano-gpt.com"));
         })
     );
 

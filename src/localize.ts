@@ -14,8 +14,16 @@ const zhCN: Record<string, string> = {
 	"OpenCode Go API key cleared.": "OpenCode Go API 密钥已清除。",
 	"OpenCode Go API key saved.": "OpenCode Go API 密钥已保存。",
 
-	// provider.ts
+	// extension.ts - Cline Pass API key prompts
+	"Cline Pass Provider API Key": "Cline Pass 提供商 API 密钥",
+	"Update your Cline Pass API key": "更新您的 Cline Pass API 密钥",
+	"Enter your Cline Pass API key": "输入您的 Cline Pass API 密钥",
+	"Cline Pass API key cleared.": "Cline Pass API 密钥已清除。",
+	"Cline Pass API key saved.": "Cline Pass API 密钥已保存。",
+
+	// provider.ts / clinePassProvider.ts
 	"OpenCode Go API key not found": "未找到 OpenCode Go API 密钥",
+	"Cline Pass API key not found": "未找到 Cline Pass API 密钥",
 	"Invalid base URL configuration.": "无效的 Base URL 配置。",
 	"Plain HTTP is only allowed for localhost or private network addresses. Use HTTPS for remote endpoints.":
 		"纯 HTTP 仅允许用于本地或私有网络地址，远程端点请使用 HTTPS。",

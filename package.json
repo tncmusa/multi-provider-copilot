@@ -42,6 +42,21 @@
 				"vendor": "opencodego",
 				"displayName": "%providerDisplayName%",
 				"managementCommand": "opencodego.setApiKey"
+			},
+			{
+				"vendor": "clinepass",
+				"displayName": "%clinepass.providerDisplayName%",
+				"managementCommand": "clinepass.setApiKey"
+			},
+			{
+				"vendor": "ollamacloud",
+				"displayName": "%ollamacloud.providerDisplayName%",
+				"managementCommand": "ollamacloud.setApiKey"
+			},
+			{
+				"vendor": "nanogpt",
+				"displayName": "%nanogpt.providerDisplayName%",
+				"managementCommand": "nanogpt.setApiKey"
 			}
 		],
 		"commands": [
@@ -81,6 +96,36 @@
 				"command": "opencodego.updateModelList",
 				"category": "%commandCategory%",
 				"title": "%command.updateModelList%"
+			},
+			{
+				"command": "clinepass.setApiKey",
+				"category": "%clinepass.commandCategory%",
+				"title": "%clinepass.command.setApiKey%"
+			},
+			{
+				"command": "clinepass.getApiKey",
+				"category": "%clinepass.commandCategory%",
+				"title": "%clinepass.command.getApiKey%"
+			},
+			{
+				"command": "ollamacloud.setApiKey",
+				"category": "%ollamacloud.commandCategory%",
+				"title": "%ollamacloud.command.setApiKey%"
+			},
+			{
+				"command": "ollamacloud.getApiKey",
+				"category": "%ollamacloud.commandCategory%",
+				"title": "%ollamacloud.command.getApiKey%"
+			},
+			{
+				"command": "nanogpt.setApiKey",
+				"category": "%nanogpt.commandCategory%",
+				"title": "%nanogpt.command.setApiKey%"
+			},
+			{
+				"command": "nanogpt.getApiKey",
+				"category": "%nanogpt.commandCategory%",
+				"title": "%nanogpt.command.getApiKey%"
 			}
 		],
 		"walkthroughs": [

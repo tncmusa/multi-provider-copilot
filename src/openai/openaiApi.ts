@@ -7,7 +7,7 @@ import {
     Progress,
 } from "vscode";
 
-import type { OpenCodeGoModelItem } from "../types";
+import type { BaseModelItem } from "../baseProvider";
 
 import type {
     OpenAIChatMessage,
@@ -313,7 +313,7 @@ export class OpenaiApi extends CommonApi<OpenAIChatMessage, Record<string, unkno
 
     prepareRequestBody(
         rb: Record<string, unknown>,
-        um: OpenCodeGoModelItem | undefined,
+        um: BaseModelItem | undefined,
         options?: ProvideLanguageModelChatResponseOptions
     ): Record<string, unknown> {
         // temperature
@@ -672,7 +672,7 @@ export class OpenaiApi extends CommonApi<OpenAIChatMessage, Record<string, unkno
      * Create a non-streaming chat message (for Git commit generation).
      */
     async *createMessage(
-        model: OpenCodeGoModelItem,
+        model: BaseModelItem,
         systemPrompt: string,
         messages: { role: string; content: string }[],
         baseUrl: string,
