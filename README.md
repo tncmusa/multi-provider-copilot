@@ -8,7 +8,7 @@
 **Use OpenCode Go, Cline Pass, Ollama Cloud and NanoGPT models directly inside GitHub Copilot Chat.**
 
 ![VS Code](https://img.shields.io/badge/VS%20Code-%5E1.116.0-007ACC.svg)
-![Version](https://img.shields.io/badge/version-1.8.2-4B8BBE.svg)
+![Version](https://img.shields.io/badge/version-1.0.0-4B8BBE.svg)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
 </div>
