@@ -71,4 +71,8 @@ export const MODEL_OVERRIDES: Record<string, ModelMetaOverride> = {
 
     // ── GLM ── keep default effort at "high" (matches historical built-in config)
     "glm-5.2": { defaultReasoningEffort: "high" },
+    "z-ai/glm-5.3-flash": { 
+        thinkingMode: "always",
+        defaultReasoningEffort: "max"
+    },
 };

@@ -2,210 +2,175 @@
 
 ![logo](/assets/logo.png)
 
-# OpenCode Go Provider for Copilot
+# Multi Provider for Copilot / Opencode Go - Cline Pass - Ollama Cloud - NanoGPT
 
-[English](#english) | [中文](#中文)
+
+**Use OpenCode Go, Cline Pass, Ollama Cloud and NanoGPT models directly inside GitHub Copilot Chat.**
+
+![VS Code](https://img.shields.io/badge/VS%20Code-%5E1.116.0-007ACC.svg)
+![Version](https://img.shields.io/badge/version-1.8.2-4B8BBE.svg)
+[![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
 </div>
 
-## English
-
 > [!IMPORTANT]
-> **This is not affiliated with, officially maintained by, or endorsed by OpenCode or Anomaly.**
-
-Integrate [OpenCode Go](https://opencode.ai/go) and optional Zen free models into GitHub Copilot Chat as a VS Code extension.
-
-### Usage
-
-1. **Set API Key**: `Ctrl+Shift+P` → `OpenCodeGo: Set OpenCode Go API Key`
-2. **Show Models**: Click the settings icon in the model picker → **Language Models** panel → set your desired models to Visible
-3. **Select Model**: In the Copilot Chat bottom model picker, choose an "OpenCode Go" or "OpenCode Zen" model
-4. **Start chatting**
-
-### Advanced Token Usage Indicator
-
-Once installed, the status bar shows the current context usage and cumulative input/output token counts for OpenCode Go models. DeepSeek models and models that return cache metrics via the OpenAI-compatible format also display the **cumulative cache hit count** and **cache hit rate** in the tooltip.
-
-You can control this indicator via the `opencodego.enableThirdPartyTokenIndicator` setting (default: `true`). When disabled, only the native Copilot token indicator remains visible.
+> **This extension is not affiliated with, officially maintained by, or endorsed by OpenCode, Cline, Ollama, or NanoGPT.**
 
 > [!NOTE]
-> Whether non-DeepSeek models display cache data depends on whether the model API returns cache metrics in an OpenAI-compatible format. This does not indicate whether the model supports caching — caching support depends on OpenCode Go.
-
-![token_counter](/assets/screenshots/token_counter.png)
-
-### Git Commit Messages
-
-Click the **magic wand** button in the Source Control (SCM) panel to auto-generate a commit message.
-
-You can configure the model, language, number of recent commits to reference, and whether to attach context files.
-
-### Model Temperature Presets
-
-Quickly switch temperature presets via `Ctrl+Shift+P` → `OpenCodeGo: Set Model Temperature Preset`.
-
-Built-in presets:
-
-| Preset | Temperature |
-|--------|-------------|
-| Precise | 0.0 |
-| Balanced | 1.0 |
-| Creative | 1.2 |
-| Extra Creative | 1.7 |
-
-You can also configure `opencodego.temperature` and `opencodego.top_p` directly in `settings.json` (requires `opencodego.modelPreset` set to `"custom"`).
-
-### Extended Vision Understanding
-
-This extension adds **extended vision understanding** capability to **text-only models** that do not natively support vision. When you send a message with an image to these models, they can call a vision-capable model to describe the image, and then answer based on that description.
-
-You can configure the default vision model and whether to enable thinking when describing images. By default, Qwen3.6-Plus is used to describe images.
-
-### OpenCode Zen Free Models
-
-Disabled by default. Enable via the `opencodego.enableZenFreeModels` setting. When enabled, free models fetched from the Zen API are added to the model picker with a `Zen/` prefix (e.g. `Zen/DeepSeek V4 Flash Free`). Requires a full reload of VS Code to take effect after changing the setting.
-
-### Configuration
-
-Available in `settings.json`:
-
-```json
-{
-  "opencodego.commitLanguage": "auto",
-  "opencodego.commitModel": "deepseek-v4-flash",
-  "opencodego.commitMessagePrompt": "",
-  "opencodego.requestTimeout": 600000,
-  "opencodego.recentCommitsCount": 10,
-  "opencodego.commitIncludeCommitDiff": false,
-  "opencodego.commitAttachContextFiles": true
-}
-```
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `opencodego.commitLanguage` | `auto` | Language for Git commit messages. When set to `auto`, the language is detected from recent commit history (defaults to English if no history exists). |
-| `opencodego.commitModel` | `deepseek-v4-flash` | Model ID used for commit message generation. |
-| `opencodego.commitMessagePrompt` | `""` | Custom system prompt for commit message generation. |
-| `opencodego.requestTimeout` | `600000` | Maximum time (ms) for a single API request. Default is 600000 (10 minutes). Increase if long responses time out. |
-| `opencodego.recentCommitsCount` | `10` | Number of recent commits to analyze for style reference when generating commit messages. Set to 0 to disable. |
-| `opencodego.commitIncludeCommitDiff` | `false` | Include the actual code changes (diff) of recent commits in the style reference, helping the model generate messages that better match the project's commit style. |
-| `opencodego.enableZenFreeModels` | `false` | Enable OpenCode Zen free models in the model picker. Zen free models are NOT supported for git commit message generation. Requires a full reload to take effect. |
-| `opencodego.commitAttachContextFiles` | `true` | Attach the content of AGENTS.md and README.md from the repository root as additional context for commit message generation, helping the model better understand the project. |
-| `opencodego.visionProxyModel` | `qwen3.6-plus` | Vision model used by the `ask_image` tool when the selected model does not support vision. |
-| `opencodego.visionProxyThinking` | `false` | Enable thinking/reasoning in the vision proxy model when answering image queries. |
-
-> [!NOTE]
-> Models with switchable thinking (e.g., DeepSeek, Qwen) provide reasoning effort levels such as `Disabled`/`High`/`Maximum`.
-
-### Build
-
-```bash
-npm install
-npm run compile
-npm run build      # packages extension.vsix
-```
-
-### License
-
-MIT License. This project references code from [oai-compatible-copilot](https://github.com/JohnnyZ93/oai-compatible-copilot).
+> **Fork notice:** this project is a fork of [OnesoftQwQ/opencode-go-copilot](https://github.com/OnesoftQwQ/opencode-go-copilot).
 
 ---
 
-## 中文
+## Overview
 
-> [!IMPORTANT]
-> **本插件与 OpenCode 官方或 Anomaly 无关，也未获得其官方维护或认可。**
+A VS Code extension that integrates multiple AI model providers into **GitHub Copilot Chat**, so you can chat with state-of-the-art LLMs — with streaming responses, thinking/reasoning display, tool calling and image support — without leaving your editor.
 
-将 [OpenCode Go](https://opencode.ai/go) 以及可选的 Zen 免费模型集成到 GitHub Copilot Chat 的 VS Code 插件。
+---
 
-### 使用
+## Features
 
-1. **设置 API Key**：`Ctrl+Shift+P` → `OpenCodeGo: Set OpenCode Go API Key`
-2. **显示模型**：在模型选择器中点击设置图标 → **语言模型** 面板 → 将需要使用的模型显示
-3. **选择模型**：在 Copilot Chat 底部模型选择器中选择 "OpenCode Go" 或 "OpenCode Zen" 下的模型
-4. **开始对话**
+| Feature | Description |
+|---------|-------------|
+| **Automatic model discovery** | Model lists are pulled from the `models.dev` catalog (with a mirror and a built-in fallback snapshot), so new models appear without updating the extension. Capabilities (context length, vision, thinking mode, reasoning effort, temperature support, endpoint) are resolved automatically — no hardcoded model list. |
+| **Streaming chat with thinking** | Responses stream live with reasoning/thinking display. Models with switchable thinking expose reasoning effort levels (Disabled / Low / Medium / High / Extra High / Maximum), and `grok-4.5` runs through the OpenAI Responses API with thinking always on. |
+| **Tool calling** | Full support for VS Code tool calls (e.g. `read_file`) and tools exposed by MCP servers. |
+| **Vision for text-only models** | Non-vision models can still "see" images by calling a vision-capable helper model through the `ask_image` tool, asking specific questions about the image and answering from its description (multi-image comparison via `ask_with_multi_image`). |
+| **Image support from MCP tools** | Screenshots and other images returned by MCP tools are read and sent directly to vision models. |
+| **Token usage indicators** | Reports usage to the native Copilot token indicator, plus an optional advanced status-bar counter with cumulative input/output tokens and cache hit rate. |
+| **Git commit messages** | One click on the magic-wand button in the Source Control panel generates a Conventional Commit message. Language is auto-detected from your commit history (or fixed, e.g. Turkish). |
+| **Temperature presets** | Quick switch between Precise / Balanced / Creative / Extra Creative presets, or set your own `temperature` and `top_p`. |
+| **Reliability** | Configurable request timeout, retries with exponential backoff, optional inter-request delay to avoid rate limits, and HTTP security checks (HTTPS enforced for remote endpoints). |
+| **Localization** | Bilingual interface — English and Simplified Chinese. |
 
-### 高级 Token 用量指示器
+---
 
-安装后，使用 OpenCode Go 提供的模型时，状态栏会显示当前上下文用量与累计输入/输出 Token 量。DeepSeek 和通过 OpenAI 格式返回缓存用量的模型还会显示**累计缓存命中量**与**缓存命中率**。
+## Supported Providers
 
-可通过 `opencodego.enableThirdPartyTokenIndicator` 设置（默认 `true`）控制此高级 Token 指示器。关闭后仅显示 Copilot 原生 Token 指示器。
+| Provider | Endpoint | API Mode | Model List |
+|----------|----------|----------|------------|
+| **OpenCode Go** | `opencode.ai/zen/go/v1` | OpenAI Chat Completions, Anthropic Messages, OpenAI Responses | Auto-discovered from `models.dev` (OpenCode Go catalog) |
+| **OpenCode Zen** *(optional)* | `opencode.ai` | OpenAI-compatible | Free models from the catalib (`-free` suffix), disabled by default |
+| **Cline Pass** | `api.cline.bot/api/v1` | OpenAI Chat Completions | 11 curated open-source models |
+| **Ollama Cloud** | `ollama.com/api/chat` | Ollama-native API (NDJSON streaming) | 15 curated open-weight models |
+| **NanoGPT** | `nano-gpt.com/api/subscription/v1` | OpenAI Chat Completions | Fetched live from the NanoGPT API |
 
-> [!NOTE]
-> 非 DeepSeek 的模型是否显示缓存数据取决于模型接口是否通过 OpenAI 格式返回缓存数据，这并不代表此模型是否支持缓存。模型对于缓存的支持情况取决于 OpenCode Go。
+### OpenCode Go
+The main provider. The model list is 100% catalog-driven — new models appear automatically. Families include **GLM** (`glm-5`, `5.1`, `5.2`), **Kimi** (`k3`, `k2.7-code`, `k2.6`, `k2.5`), **DeepSeek** (`v4-pro`, `v4-flash`), **MiMo**, **MiniMax** (`m3`, `m2.7`, `m2.5`), **Qwen** (`qwen3.8-max`, `3.7-max/plus`, `3.6-plus`, `3.5-plus`), plus **gpt-5.6-luna**, **grok-4.5** and **hy3**. Reasoning strengths auto-derive from the catalog manifest (`reasoning_options`).
 
-![token_counter](/assets/screenshots/token_counter.png)
+### OpenCode Zen (optional free models)
+Toggle `opencodego.enableZenFreeModels` in settings to append free `-free` models (e.g. `big-pickle`, `deepseek-v4-flash-free`, `minimax-m3-free`, `nemotron-3-super-free`) to the model picker, labeled **OpenCode Zen**.
 
-### Git 提交消息
+### Cline Pass
+A monthly subscription with **11 open-source models**: GLM 5.2, Kimi K3 / K2.7 / K2.6, DeepSeek V4 Pro / Flash, MiMo V2.5 / V2.5-Pro, MiniMax M3, Qwen3.7 Max / Plus — served through one OpenAI-compatible endpoint.
 
-在源代码管理（SCM）面板中点击魔法棒按钮，自动生成 Git 提交消息。
+### Ollama Cloud
+**15 open-weight models** including **GPT-OSS 120B**, **Gemma 4 31B**, **Nemotron 3** (super / ultra), **Mistral Large 3**, GLM 5.1/5.2, Kimi K3 / K2.7 / K2.6, DeepSeek V4 Pro / Flash, MiniMax M3 / M2.7, Qwen 3.5. Uses the native Ollama streaming API (`/api/chat`, newline-delimited JSON) with `think`-based reasoning levels.
 
-可在配置里配置使用的模型、语言、参考的最近提交数量以及是否附加上下文文件。
+### NanoGPT
+Flat-rate subscription. The **entire model catalog is fetched live from the NanoGPT API** (`/models?detailed=true`), including capability metadata, context length and reasoning effort levels. IDs follow `provider/model` format, with `:thinking`-suffixed reasoning variants.
 
-### 扩展视觉理解
+---
 
-本插件为**不支持视觉理解**的**纯文本模型**添加了**扩展视觉理解**功能，当你向这些模型发送带有图片的信息时，他们可以调用支持视觉理解的模型为图片输出描述，然后再回答。
+## Quick Start
 
-通过配置文件可更改默认使用的模型以及是否在描述图片时启用思考。默认情况下，将使用 Qwen3.6-Plus 描述图片。
+> **Requires VS Code 1.116+.**
 
-### 启用 OpenCode Zen 免费模型
+1. **Install** the extension.
+2. **Set your API key(s)** — `Ctrl+Shift+P` and run the matching command for each provider you want to use:
 
-该功能默认关闭，通过 `opencodego.enableZenFreeModels` 设置启用。开启后，将从 Zen API 获取免费模型并添加到模型选择器中，名称带 `Zen/` 前缀（如 `Zen/DeepSeek V4 Flash Free`）。更改设置后需要重新加载 VS Code 才能生效。
+   | Provider | Set Key Command |
+   |----------|-----------------|
+   | OpenCode Go | `OpenCodeGo: Set OpenCode Go API Key` |
+   | Cline Pass | `ClinePass: Set Cline Pass API Key` |
+   | Ollama Cloud | `OllamaCloud: Set Ollama Cloud API Key` |
+   | NanoGPT | `NanoGPT: Set NanoGPT API Key` |
 
-### 调整模型温度
+3. **Show the models** — in the Copilot Chat model picker, click the settings icon, open the **Language Models** panel and set the models you want to **Visible**.
+4. **Select a model** in the model picker — the providers appear as "OpenCode Go", "Cline Pass", "Ollama Cloud" and "NanoGPT".
+5. **Chat!**
 
-通过 `Ctrl+Shift+P` → `OpenCodeGo: Set Model Temperature Preset` 快速切换温度预设。
+**Tip:** use the **Generate Git Commit Message** button (magic wand) in the Source Control panel to write commit messages for you.
 
-内置 4 个预设档位：
+---
 
-| 档位 | 温度 |
-|------|------|
-| 精确 | 0.0 |
-| 均衡 | 1.0 |
-| 创意 | 1.2 |
-| 极具创意 | 1.7 |
+## Screenshots
 
-也可在 `settings.json` 中直接配置 `opencodego.temperature` 和 `opencodego.top_p`（需将 `opencodego.modelPreset` 设为 `"custom"`）。
+Advanced token indicator in the VS Code status bar (cumulative input/output tokens, cache hit rate):
 
-### 配置
+![Token indicator](/assets/screenshots/token_counter.png)
 
-可在 `settings.json` 中配置：
+---
 
-```json
-{
-  "opencodego.commitLanguage": "auto",
-  "opencodego.commitModel": "deepseek-v4-flash",
-  "opencodego.commitMessagePrompt": "",
-  "opencodego.requestTimeout": 600000,
-  "opencodego.recentCommitsCount": 10,
-  "opencodego.commitIncludeCommitDiff": false,
-  "opencodego.commitAttachContextFiles": true
-}
-```
+## Commands
 
-| 配置项 | 默认值 | 说明 |
-|--------|--------|------|
-| `opencodego.commitLanguage` | `auto` | 提交消息语言。设为 `auto` 时将根据历史提交自动检测语言（无历史时默认英语）。 |
-| `opencodego.commitModel` | `deepseek-v4-flash` | 用于生成提交消息的模型。 |
-| `opencodego.commitMessagePrompt` | `""` | 生成提交消息的自定义系统提示词。 |
-| `opencodego.requestTimeout` | `600000` | 单个 API 请求的最大等待时间（毫秒）。默认 600000（10 分钟）。生成长内容超时时可增大此值。 |
-| `opencodego.recentCommitsCount` | `10` | 生成提交消息时参考的近期提交数量，用于学习仓库提交风格。设为 0 可禁用。 |
-| `opencodego.commitIncludeCommitDiff` | `false` | 在风格参考中包含历史提交的实际代码变更（diff），帮助模型生成更符合项目提交风格的消息。 |
-| `opencodego.enableZenFreeModels` | `false` | 启用 OpenCode Zen 免费模型并添加到模型选择器中。暂不支持用于 Git 提交消息生成。更改后需重载 VS Code 生效。 |
-| `opencodego.commitAttachContextFiles` | `true` | 将仓库根目录的 AGENTS.md 和 README.md 作为额外上下文附加到提交消息生成中，帮助模型更好地理解项目。 |
-| `opencodego.visionProxyModel` | `qwen3.6-plus` | 用于 ask_image 工具的视觉模型 ID。当所选模型不支持视觉时，该模型用于回答图片相关问题。 |
-| `opencodego.visionProxyThinking` | `false` | 在视觉代理模型回答图片查询时启用思考/推理功能。 |
+| Command | Description |
+|---------|-------------|
+| `OpenCodeGo: Set OpenCode Go API Key` | Store your OpenCode Go API key (SecretStorage) |
+| `OpenCodeGo: Get OpenCode Go API Key` | Open the OpenCode AI website to get a key |
+| `OpenCodeGo: Open Settings` | Open the extension settings page |
+| `OpenCodeGo: Set Model Preset` | Switch temperature preset (Precise / Balanced / Creative / Extra Creative / custom) |
+| `OpenCodeGo: Update Model List` | Force-refresh the model list (models.dev catalog + API availability) |
+| `OpenCodeGo: Generate Git Commit Message` | Generate a conventional commit message for the current repo |
+| `OpenCodeGo: Abort Git Commit Message` | Stop the running commit generation |
+| `ClinePass: Set Cline Pass API Key` | Store your Cline Pass API key |
+| `ClinePass: Get Cline Pass API Key` | Open the Cline website to get a key |
+| `OllamaCloud: Set Ollama Cloud API Key` | Store your Ollama Cloud API key |
+| `OllamaCloud: Get Ollama Cloud API Key` | Open the Ollama website to get a key |
+| `NanoGPT: Set NanoGPT API Key` | Store your NanoGPT API key |
+| `NanoGPT: Get NanoGPT API Key` | Open the NanoGPT website to get a key |
 
-> [!NOTE]
-> 支持切换思考模式的模型（如 DeepSeek、Qwen）提供`禁用思考`/`高`/`极高`等推理强度选项。
+---
 
-### 编译
+## Settings
+
+Key configuration options (all under the `opencodego.*` namespace unless noted):
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `opencodego.enableZenFreeModels` | `false` | Append OpenCode Zen free models (`-free`) to the picker |
+| `opencodego.enableAutoModelDiscovery` | `true` | Filter the model picker by the models actually available from the API |
+| `opencodego.modelPreset` | `precise` | Temperature preset (`precise` / `balanced` / `creative` / `extra-creative` / `custom`) |
+| `opencodego.temperature` / `opencodego.top_p` | — | Custom sampling parameters (used with `custom` preset) |
+| `opencodego.requestTimeout` | `600000` | Request timeout in ms (default 10 minutes) |
+| `opencodego.delay` | `0` | Optional delay before each request, to avoid rate limits |
+| `opencodego.retry.enabled` / `max_attempts` / `interval_ms` / `status_codes` | `true` / `3` / `1000` / `[]` | Retry policy with exponential backoff |
+| `opencodego.commitLanguage` | `auto` | Commit message language (auto-detects from history, or fixed, e.g. `Turkish`) |
+| `opencodego.commitModel` | `deepseek-v4-flash` | Model used for commit message generation |
+| `opencodego.visionProxyModel` | `qwen-plus-latest` | Vision model used by the `ask_image` proxy |
+| `opencodego.visionProxyThinking` | `false` | Enable thinking for the vision proxy model |
+| `opencodego.visionMaxRounds` | `5` | Max follow-up `ask_image` rounds per request |
+| `opencodego.modelsDevMirrorUrl` / `modelsDevMirrorToken` | mirror URL | Fallback mirror for the models.dev catalog |
+| `opencodego.showDeprecatedModels` | `false` | Show deprecated models in the picker |
+| `opencodego.enableThirdPartyTokenIndicator` | `true` | Advanced status-bar token counter (native indicator always on) |
+| `opencodego.readFileLines` | `0` | Auto-expand `read_file` tool requests by this many lines |
+
+---
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---------|-----|
+| **No models appear in the picker** | Set your API key, then run `OpenCodeGo: Update Model List`. Model discovery needs the `models.dev` catalog (or mirror/fallback) and a valid key. |
+| **`Plain HTTP is only allowed for localhost or private network addresses`** | Remote endpoints must use HTTPS for security; `http://` is only accepted for local/private addresses. |
+| **OpenCode Zen models show `401` errors** | Zen free models can expire; run `OpenCodeGo: Update Model List` after re-enabling them, or check your API key. |
+| **`IMAGE_SENSITIVE` error** | The image you sent was flagged by content moderation — try a different image. |
+| **Git commit message in the wrong language** | Set `opencodego.commitLanguage` explicitly (e.g. `Turkish`) instead of `auto`. |
+
+---
+
+## Build from Source
 
 ```bash
 npm install
-npm run compile
-npm run build      # 打包为 extension.vsix
+npm run compile   # type-check + build to ./out
+npm run lint      # eslint
+npm run build     # packages extension.vsix
 ```
 
-### 许可
+Use the Extension Development Host (`F5`) to try the extension locally.
 
-MIT License。本项目参考了 [oai-compatible-copilot](https://github.com/JohnnyZ93/oai-compatible-copilot) 的代码。
+---
+
+## License
+
+[MIT](LICENSE) — feel free to fork, modify and share.

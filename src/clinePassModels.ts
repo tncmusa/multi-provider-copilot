@@ -33,6 +33,8 @@ export const CLINE_PASS_BASE_URL = "https://api.cline.bot/api/v1";
  */
 const CLINE_PASS_MODELS: Record<string, string> = {
     "cline-pass/glm-5.2": "glm-5.2",
+    "cline-pass/glm-5.3": "glm-5.3",
+    "cline-pass/glm-5.3-flash": "glm-5.3-flash",
     "cline-pass/kimi-k3": "kimi-k3",
     "cline-pass/kimi-k2.7-code": "kimi-k2.7-code",
     "cline-pass/kimi-k2.6": "kimi-k2.6",
