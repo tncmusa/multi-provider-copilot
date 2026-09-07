@@ -446,7 +446,7 @@ scripts/
 | `statusBar.ts`                        | ~140 | 状态栏创建、更新、累计计数器                                                                                                                                                                           |
 | `logger.ts`                           | ~55  | 日志输出 (LogOutputChannel)                                                                                                                                                                            |
 | `localize.ts`                         | ~120 | 中英文国际化（含 `low/medium/high/xhigh/max` 思考强度标签、Cline Pass API Key 提示）                                                                                                                   |
-| `versionManager.ts`                   | ~35  | 扩展版本信息（使用正确扩展 ID `OnesoftQwQ.opencode-go-copilot-provider`）                                                                                                                              |
+| `versionManager.ts`                   | ~35  | 扩展版本信息（使用正确扩展 ID `tncmusa.multi-provider-copilot`）                                                                                                                              |
 | `openai/openaiApi.ts`                 | ~613 | OpenAI 格式 API 实现 (消息转换/请求构建/流式处理/图片代理)                                                                                                                                             |
 | `openai/openaiTypes.ts`               | ~75  | OpenAI 类型定义                                                                                                                                                                                        |
 | `anthropic/anthropicApi.ts`           | ~535 | Anthropic 格式 API 实现 (消息转换/请求构建/流式处理/图片代理)                                                                                                                                          |
@@ -1083,7 +1083,7 @@ ask_image 工具定义的 OpenAI 格式（`type: "function"`），包含 `imageI
 
 | 静态方法                                     | 说明                                                                                                                                          |
 | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `getVersion(): string`                       | 获取扩展版本号（从 `package.json` 读取，使用正确扩展 ID `OnesoftQwQ.opencode-go-copilot-provider` 而非旧值 `my-company.opencode-go-copilot`） |
+| `getVersion(): string`                       | 获取扩展版本号（从 `package.json` 读取，使用正确扩展 ID `tncmusa.multi-provider-copilot` 而非旧值 `my-company.opencode-go-copilot`） |
 | `getUserAgent(): string`                     | 构建 User-Agent 字符串（被 `CommonApi.prepareHeaders()` 用作回退 User-Agent）                                                                 |
 | `getClientInfo(): { name, version, author }` | 获取客户端信息                                                                                                                                |
 

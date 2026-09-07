@@ -1,6 +1,6 @@
 {
-	"name": "opencode-go-copilot-provider",
-	"publisher": "OnesoftQwQ",
+	"name": "multi-provider-copilot",
+	"publisher": "tncmusa",
 	"displayName": "OpenCode Go Provider for Copilot",
 	"description": "Integrate OpenCode Go models into GitHub Copilot Chat",
 	"icon": "assets/logo.png",
@@ -24,7 +24,7 @@
 	"bugs": {
 		"url": "https://github.com/OnesoftQwQ/opencode-go-copilot/issues"
 	},
-	"version": "1.8.2",
+	"version": "1.0.0",
 	"engines": {
 		"vscode": "^1.116.0"
 	},

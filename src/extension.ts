@@ -18,7 +18,7 @@ import { prepareLanguageModelChatInformation, resetAutoDiscoveryState } from "./
 const WELCOME_SHOWN_KEY = "opencodego.welcomeShown";
 
 /** Walkthrough contribution ID (publisher.extension#walkthroughId). */
-const WALKTHROUGH_ID = "OnesoftQwQ.opencode-go-copilot-provider#opencodeGoGettingStarted";
+const WALKTHROUGH_ID = "tncmusa.multi-provider-copilot#opencodeGoGettingStarted";
 
 export function activate(context: vscode.ExtensionContext) {
     // Initialize logger
@@ -194,7 +194,7 @@ export function activate(context: vscode.ExtensionContext) {
     // Command to open extension settings
     context.subscriptions.push(
         vscode.commands.registerCommand("opencodego.openSettings", () => {
-            vscode.commands.executeCommand("workbench.action.openSettings", "@ext:OnesoftQwQ.opencode-go-copilot-provider");
+            vscode.commands.executeCommand("workbench.action.openSettings", "@ext:tncmusa.multi-provider-copilot");
         })
     );
 
