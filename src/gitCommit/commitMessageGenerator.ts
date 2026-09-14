@@ -4,7 +4,8 @@ import * as vscode from "vscode";
 import { getGitDiff, getRecentCommits } from "./gitUtils";
 import { OpenaiApi } from "../openai/openaiApi";
 import { AnthropicApi } from "../anthropic/anthropicApi";
-import { getCatalogModelConfig } from "../catalogModels";
+import { getCatalogModelConfig, resolveProviderForModelId } from "../catalogModels";
+import { deriveOpencodeSessionIdFromText } from "../opencodeSession";
 import { getCatalogProviderBaseUrl } from "../modelsDev";
 import { logger } from "../logger";
 import { l10n } from "../localize";
@@ -235,6 +236,16 @@ async function performCommitMsgGeneration(secrets: vscode.SecretStorage, gitDiff
         }
         modelId = selectedModel.id;
         logger.info("commit.start", { modelId });
+
+        // OpenCode Go requires a per-conversation x-opencode-session header on
+        // every inference request. Only opencode-go models send it — Zen
+        // (-free), Cline Pass, Ollama Cloud and NanoGPT endpoints must not.
+        if (resolveProviderForModelId(selectedModel.id) === "opencode-go") {
+            selectedModel.headers = {
+                ...selectedModel.headers,
+                "x-opencode-session": deriveOpencodeSessionIdFromText(selectedModel.id, prompt),
+            };
+        }
 
         const apiKey = await ensureApiKey(secrets);
         if (!apiKey) {

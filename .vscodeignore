@@ -12,3 +12,4 @@ vsc-extension-quickstart.md
 .eslint*
 **/tsconfig.tsbuildinfo
 scripts/
+.kilo/

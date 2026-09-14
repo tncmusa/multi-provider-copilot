@@ -51,6 +51,7 @@
 | **请求延迟**                 | 可配置的请求间隔延迟，避免触发 API 限流                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | **超时控制**                 | 可配置的请求超时时间（默认 10 分钟）                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | **HTTP 安全检查**            | 始终强制校验 Base URL：拒绝非 HTTP 协议；针对 `http:` 协议仅允许 localhost、127.0.0.1、::1、192.168.\*、10.\*、0.0.0.0 等本地/私有网络地址，远程端点强制使用 HTTPS                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| **会话 Header**              | OpenCode Go 推理请求自动携带 `x-opencode-session` header（服务端 2026-09-05 起强制要求，用于路由和 prompt-cache 优化）。**仅 `opencode-go` 服务商模型发送**；OpenCode Zen（`-free`）、Cline Pass、Ollama Cloud、NanoGPT 端点一律不发送。会话 ID 由 `SHA-256(模型 ID + 首条用户消息文本)` 确定性推导为 UUID 格式，无文本锚点（如纯图片会话）时回退随机 UUID（`src/opencodeSession.ts`）                                                                                                                                                                                            |
 | **立即取消**                 | 取消请求时通过 `reader.cancel()` 立即中断流式读取，停止后台接收                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | **视觉代理配置**             | 支持通过设置 `opencodego.visionProxyModel`、`opencodego.visionProxyThinking` 配置图片代理所使用的视觉模型和思考模式。`opencodego.visionProxyThinking` 默认关闭，关闭时内部请求通过 `modelOptions.thinking={ type: false }` / `reasoning_effort="disabled"` 禁用视觉模型思考，最终 OpenAI 兼容请求体发送 `thinking: { type: false }`                                                                                                                                                                                                                                                     |
 | **安装欢迎页 (Walkthrough)** | 首次安装且未配置 API Key 时自动打开引导向导，指引用户设置 API Key 和打开语言模型管理器。包含 3 个步骤：设置 API Key、显示模型、高级设置。通过 `onStartupFinished` 激活事件确保在 VS Code 启动后立即检测                                                                                                                                                                                                                                                                                                                                                                                 |
@@ -191,6 +192,11 @@ provideLanguageModelChatResponse(model, messages, options, progress, token)
   ├── 9b. 获取 Response body reader 后，注册取消回调
   │      └── `token.onCancellationRequested` / `signal.addEventListener("abort")`
   │      └── 调用 `reader.cancel()` 立即中断流，使 `reader.read()` 返回 `{ done: true }`
+  │
+  ├── 9c. 注入 x-opencode-session header（openCodeGoProvider.dispatchChatRequest 内，apiMode 路由前）
+  │      └── 仅 `resolveProviderForModelId === "opencode-go"` 时发送；Zen（`-free`）及其它服务商端点不发送
+  │      └── 会话 ID = SHA-256(模型 ID + 首条用户消息文本) → UUID 格式，无文本锚点时随机 UUID（src/opencodeSession.ts）
+  │      └── requestHeaders 按引用共享，视觉代理各轮请求自动携带同一 header
   │
   │
   ├── 10. 根据 apiMode 路由:
@@ -355,6 +361,7 @@ generateCommitMsg(secrets, scm?)
   │   ├── 语言检测: auto 模式时告知模型匹配历史 commit 语言风格
   │   ├── 用户当前输入 (SCM InputBox)
   │   └── Git Diff 内容
+  ├── 注入会话 Header: 仅 opencode-go 模型携带 `x-opencode-session`（deriveOpencodeSessionIdFromText）
   ├── 调用 API:
   │   ├── OpenaiApi.createMessage() / AnthropicApi.createMessage()
   │   └── 流式输出到 SCM InputBox
@@ -378,6 +385,7 @@ src/
 ├── localize.ts                           # 国际化/本地化
 ├── logger.ts                             # 日志系统
 ├── modelOverrides.ts                     # 模型覆盖表（models.dev 无法表达的内容）
+├── opencodeSession.ts                    # x-opencode-session 会话 ID 推导（SHA-256 → UUID，OpenCode Go 专用）
 ├── catalogModels.ts                      # 统一模型解析/构建层 (Go + Zen)
 ├── hardcodedModelList.ts                 # 硬编码兜底目录快照（官方目录与镜像均不可达时的最后防线）
 ├── modelsDev.ts                          # models.dev 目录拉取与查询
@@ -436,6 +444,7 @@ scripts/
 | `catalogModels.ts`                    | ~230 | 统一模型解析/构建层：`ModelMeta` 合并链（`MODEL_OVERRIDES` > 目录条目 > 默认值）、`buildCatalogModelInfo()`、`getCatalogModelConfig()`、`resolveProviderForModelId()`（`-free` 后缀分流 Zen/Go）           |
 | `hardcodedModelList.ts`               | ~4880 | 硬编码兜底目录快照：opencode-go（24 个）与 opencode（85 个）模型的完整元数据（2026-08-04），官方目录与镜像均不可达时作为最后防线，与运行时 JSON 相同方式断言为 `HardcodedCatalogData`                             |
 | `modelOverrides.ts`                   | ~50  | 每模型覆盖表 `MODEL_OVERRIDES`（全部可选字段）+ `ModelMetaOverride` 类型；仅维护 models.dev 无法表达的内容（Anthropic apiMode、adaptive、`reasoning_split` 等）                                             |
+| `opencodeSession.ts`                  | ~70  | `x-opencode-session` 会话 ID 推导：`deriveOpencodeSessionId(modelId, messages)`（首条用户消息文本锚点 → SHA-256 → UUID，无锚点回退随机 UUID）与 `deriveOpencodeSessionIdFromText(modelId, text)`（纯文本变体，用于提交消息生成）；仅 OpenCode Go 服务商模型使用 |
 | `types.ts`                            | ~95  | `OpenCodeGoModelItem extends BaseModelItem`, `ModelPreset`, `ModelsResponse`, `RetryConfig` 等类型                                                                                                                           |
 | `apiModelList.ts`                     | ~110 | API 模型列表获取：从 catalog 解析的 base URL 的 `/models` 端点拉取可用模型 ID，1 分钟缓存，静默降级                                                                                                    |
 | `modelsDev.ts`                        | ~440 | models.dev 目录拉取与查询：三级回退链（官方 → 镜像 → 硬编码列表），从 `catalog.json` 下载并索引全局模型与服务商，支持短 ID 匹配、provider 查询、`reasoning_options`/思考模式/视觉/预算推断，1 分钟缓存                                                                                                |
@@ -552,6 +561,14 @@ scripts/
 
 ---
 
+### 4.2b `src/opencodeSession.ts`
+
+#### `deriveOpencodeSessionId(modelId, messages): string`
+推导 OpenCode Go `x-opencode-session` 会话 ID。VS Code 不向语言模型提供商暴露会话标识符，因此从目标模型 ID + 会话首条用户消息文本确定性推导（聊天客户端每轮重发相同历史，推导出的 ID 跨轮稳定、跨会话不同）：遍历消息，取首个含非空文本的用户消息（仅统计字符串与 `LanguageModelTextPart` 文本部分，图片等二进制部分跳过，保证哈希廉价且不依赖图片字节），`SHA-256(modelId + anchorText)` 前 32 位十六进制格式化为 `8-4-4-4-12` UUID。无文本锚点（如纯图片会话）时回退 `crypto.randomUUID()`。
+
+#### `deriveOpencodeSessionIdFromText(modelId, text): string`
+纯文本变体（用于 Git 提交消息生成等一次性单条请求路径）：`SHA-256(modelId + text)` → UUID 格式；`text.trim()` 为空时回退随机 UUID。仅 `opencode-go` 服务商模型使用该 header。
+
 ### 4.3 `src/openCodeGoProvider.ts`
 
 #### `class OpenCodeGoChatModelProvider extends BaseChatModelProvider<OpenCodeGoModelItem>`
@@ -570,7 +587,7 @@ OpenCode Go 核心 Provider 类。根据模型配置路由到 Chat Completions�
 应用推理力度和 temperature/top_p（模型预设或自定义设置）。返回浅拷贝。
 
 #### `protected async dispatchChatRequest(params): Promise<void>`
-将聊天请求分发给 OpenCode Go 后端。包括状态栏更新、三路 apiMode 分发（OpenAI/Anthropic/Responses）、流式解析、图片代理拦截处理和 fallback token 用量报告。
+将聊天请求分发给 OpenCode Go 后端。包括状态栏更新、三路 apiMode 分发（OpenAI/Anthropic/Responses）、流式解析、图片代理拦截处理和 fallback token 用量报告。分发开始时为 `opencode-go` 服务商模型注入 `x-opencode-session` header（`deriveOpencodeSessionId`，Zen `-free` 模型除外）；`requestHeaders` 按引用传递，视觉代理各轮请求自动携带同一 header。
 
 #### `protected _getProviderSpecificErrorMessage(err, modelId): string | undefined`
 处理 OpenCode Go 特有错误：Zen 免费模型过期（`[401]` + `resolveProviderForModelId === "opencode"`）和图片内容审核拒绝（`IMAGE_SENSITIVE:`）。
@@ -1245,7 +1262,7 @@ Anthropic 请求体。包含 `model`, `messages`, `max_tokens`, `system`, `strea
 确保 API Key 存在。
 
 #### `performCommitMsgGeneration(secrets, gitDiff, inputBox, repoPath?): Promise<void>`
-核心生成逻辑。构建 prompt（含自定义提示词、最近提交风格、用户输入、diff 内容），支持 `auto` 语言模式（由模型根据历史 commit 风格自动推断），创建 API 实例，流式输出提交消息到 InputBox。支持通过配置 `opencodego.commitIncludeCommitDiff` 控制风格参考中是否包含历史提交的实际代码变更（默认关闭）。支持通过配置 `opencodego.commitAttachContextFiles`（默认开启）控制是否将仓库根目录的 `AGENTS.md` 和 `README.md` 内容附加到 prompt 中作为额外上下文。在选择模型配置后浅拷贝（`{ ...config }`）再修改 `enable_thinking` 和 `max_completion_tokens`，防止对共享的自动发现配置缓存的突变。
+核心生成逻辑。构建 prompt（含自定义提示词、最近提交风格、用户输入、diff 内容），支持 `auto` 语言模式（由模型根据历史 commit 风格自动推断），创建 API 实例，流式输出提交消息到 InputBox。支持通过配置 `opencodego.commitIncludeCommitDiff` 控制风格参考中是否包含历史提交的实际代码变更（默认关闭）。支持通过配置 `opencodego.commitAttachContextFiles`（默认开启）控制是否将仓库根目录的 `AGENTS.md` 和 `README.md` 内容附加到 prompt 中作为额外上下文。在选择模型配置后浅拷贝（`{ ...config }`）再修改 `enable_thinking` 和 `max_completion_tokens`，防止对共享的自动发现配置缓存的突变。对 `opencode-go` 服务商模型注入 `x-opencode-session` header（`deriveOpencodeSessionIdFromText`，Zen `-free` 模型不发送）。
 
 #### `abortCommitGeneration(): void`
 中止提交消息生成。

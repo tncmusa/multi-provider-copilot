@@ -15,6 +15,7 @@ import { getCatalogProviderBaseUrl } from "./modelsDev";
 
 import { prepareLanguageModelChatInformation } from "./openCodeGoModels";
 import { getCatalogModelConfig, resolveProviderForModelId } from "./catalogModels";
+import { deriveOpencodeSessionId } from "./opencodeSession";
 import { l10nFormat, l10n } from "./localize";
 import { textTokenLength } from "./provideToken";
 import { updateContextStatusBar, recordUsage, updateCumulativeTooltip, updateStatusBarWithApiPrompt } from "./statusBar";
@@ -179,6 +180,16 @@ export class OpenCodeGoChatModelProvider extends BaseChatModelProvider<OpenCodeG
 
         const apiMode = um.apiMode || "openai";
         const BASE_URL = um.baseUrl || getCatalogProviderBaseUrl("opencode-go", "https://opencode.ai/zen/go/v1/");
+
+        // OpenCode Go requires a stable per-conversation session ID on every
+        // inference request (server errors without it since 2026-09-05). Only
+        // opencode-go models send it — Zen (-free), Cline Pass, Ollama Cloud
+        // and NanoGPT endpoints must never receive this header.
+        const requestModelId = um.id ?? model.id;
+        if (resolveProviderForModelId(requestModelId) === "opencode-go") {
+            requestHeaders["x-opencode-session"] = deriveOpencodeSessionId(requestModelId, messages);
+        }
+        logger.debug("request.session", { sessionId: requestHeaders["x-opencode-session"], modelId: requestModelId });
 
         if (apiMode === "anthropic") {
             // Anthropic API mode
