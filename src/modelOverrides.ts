@@ -34,6 +34,10 @@ export interface ModelMetaOverride {
     thinkingBudget?: { min?: number; max?: number };
     /** Whether to include reasoning_content in assistant messages sent to the API */
     includeReasoningInRequest?: boolean;
+    /** Opt-in: send the OpenAI "thinking" body param ({type: enabled/disabled/adaptive}). Default off — strict upstreams (e.g. OpenCode Go Console Go) reject the unknown field "thinking" with HTTP 400. */
+    sendThinkingParam?: boolean;
+    /** Whether "none" is a valid reasoning effort for disabling thinking (catalog-derived; override when the catalog is wrong) */
+    supportsNoneEffort?: boolean;
     status?: string;
     cost?: { cache_read: number; input: number; output: number };
 }

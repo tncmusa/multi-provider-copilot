@@ -318,6 +318,17 @@ export function inferThinkingMode(entry: ModelsDevEntry): "switchable" | "always
 }
 
 /**
+ * Whether the catalog entry declares a thinking on/off toggle
+ * (`reasoning_options` contains a `toggle` option). Models that declare a
+ * toggle accept the `thinking` body param ({type: enabled/disabled}).
+ */
+export function inferThinkingToggle(entry: ModelsDevEntry): boolean {
+    const opts = entry.reasoning_options;
+    if (!opts) return false;
+    return opts.some((opt) => opt.type === "toggle");
+}
+
+/**
  * Extract supported reasoning effort values from a catalog model entry.
  * Returns undefined if no explicit effort values are defined (simple on/off).
  */

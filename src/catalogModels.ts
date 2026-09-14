@@ -26,6 +26,7 @@ import {
     inferReasoningEfforts,
     inferThinkingBudget,
     inferThinkingMode,
+    inferThinkingToggle,
     inferVision,
     lookupModelDevEntry,
     type ModelsDevEntry,
@@ -65,6 +66,12 @@ export interface ModelMeta {
     supportsTemperature: boolean;
     toolCalling: boolean;
     baseUrl: string;
+    /** Whether the OpenAI "thinking" body param should be sent for this model (opt-in; strict upstreams reject unknown "thinking") */
+    sendThinkingParam: boolean;
+    /** Whether the catalog exposes a "none" reasoning effort for disabling thinking via reasoning_effort */
+    supportsNoneEffort: boolean;
+    /** Whether the catalog declares a thinking on/off toggle (`toggle` reasoning option) */
+    thinkingToggle: boolean;
     thinkingBudget?: { min?: number; max?: number };
     status?: string;
     cost: { cache_read: number; input: number; output: number };
@@ -104,6 +111,9 @@ function resolveFromCatalog(providerId: ProviderId, modelId: string): ModelMeta 
         supportsTemperature: entry?.temperature ?? true,
         toolCalling: entry?.tool_call ?? true,
         baseUrl: getCatalogProviderBaseUrl(providerId, FALLBACK_BASE_URLS[providerId]),
+        sendThinkingParam: entry ? inferThinkingToggle(entry) : false,
+        supportsNoneEffort: rawEfforts?.includes("none") ?? false,
+        thinkingToggle: entry ? inferThinkingToggle(entry) : false,
         thinkingBudget: entry ? inferThinkingBudget(entry) : undefined,
         status: entry?.status,
         cost: entry?.cost ?? { cache_read: 0, input: 0, output: 0 },
@@ -127,6 +137,9 @@ function applyOverride(meta: ModelMeta, override?: ModelMetaOverride): ModelMeta
         supportsTemperature: override.supportsTemperature ?? meta.supportsTemperature,
         toolCalling: override.toolCalling ?? meta.toolCalling,
         baseUrl: override.baseUrl ?? meta.baseUrl,
+        sendThinkingParam: override.sendThinkingParam ?? meta.sendThinkingParam,
+        supportsNoneEffort: override.supportsNoneEffort ?? meta.supportsNoneEffort,
+        thinkingToggle: meta.thinkingToggle,
         thinkingBudget: override.thinkingBudget ?? meta.thinkingBudget,
         status: override.status ?? meta.status,
         cost: override.cost ?? meta.cost,
@@ -142,6 +155,13 @@ export function resolveModelMeta(providerId: ProviderId, modelId: string): Model
 
 /**
  * Build the reasoning effort enum (values/labels/descriptions/default) for a model.
+ *
+ * The "disabled" (no thinking) option is only offered when the model can
+ * actually turn thinking off:
+ * - the catalog effort list contains "none" (sent as reasoning_effort: "none"), or
+ * - the catalog declares a thinking toggle (sent as the thinking body param).
+ * Effort-only models (e.g. glm-5.3-flash, deepseek-v4-pro, kimi-k2.7-code)
+ * always reason and get the effort levels only.
  */
 function buildReasoningEnum(meta: ModelMeta): {
     enumValues: string[];
@@ -149,17 +169,14 @@ function buildReasoningEnum(meta: ModelMeta): {
     enumDescriptions: string[];
     defaultEffort: string;
 } {
+    const canDisable = (meta.thinkingToggle || meta.supportsNoneEffort) && meta.thinkingMode !== "always";
     const hasEfforts = meta.supportedReasoningEfforts.length > 0;
     let enumValues: string[];
     if (hasEfforts) {
-        if (meta.thinkingMode === "switchable") {
-            enumValues = ["disabled", ...meta.supportedReasoningEfforts];
-        } else {
-            enumValues = [...meta.supportedReasoningEfforts];
-        }
+        enumValues = canDisable ? ["disabled", ...meta.supportedReasoningEfforts] : [...meta.supportedReasoningEfforts];
     } else {
         if (meta.thinkingMode === "switchable") {
-            enumValues = ["disabled", "enabled"];
+            enumValues = canDisable ? ["disabled", "enabled"] : ["enabled"];
         } else if (meta.thinkingMode === "adaptive") {
             enumValues = ["disabled", "adaptive"];
         } else {
@@ -332,6 +349,8 @@ export function getCatalogModelConfig(modelId: string): OpenCodeGoModelItem {
         enable_thinking: true,
         include_reasoning_in_request: override?.includeReasoningInRequest ?? true,
         thinkingMode: meta.thinkingMode,
+        sendThinkingParam: meta.sendThinkingParam,
+        supportsNoneEffort: meta.supportsNoneEffort,
         cost: meta.cost,
     };
 

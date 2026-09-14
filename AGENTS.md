@@ -53,7 +53,7 @@
 | **HTTP 安全检查**            | 始终强制校验 Base URL：拒绝非 HTTP 协议；针对 `http:` 协议仅允许 localhost、127.0.0.1、::1、192.168.\*、10.\*、0.0.0.0 等本地/私有网络地址，远程端点强制使用 HTTPS                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | **会话 Header**              | OpenCode Go 推理请求自动携带 `x-opencode-session` header（服务端 2026-09-05 起强制要求，用于路由和 prompt-cache 优化）。**仅 `opencode-go` 服务商模型发送**；OpenCode Zen（`-free`）、Cline Pass、Ollama Cloud、NanoGPT 端点一律不发送。会话 ID 由 `SHA-256(模型 ID + 首条用户消息文本)` 确定性推导为 UUID 格式，无文本锚点（如纯图片会话）时回退随机 UUID（`src/opencodeSession.ts`）                                                                                                                                                                                            |
 | **立即取消**                 | 取消请求时通过 `reader.cancel()` 立即中断流式读取，停止后台接收                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| **视觉代理配置**             | 支持通过设置 `opencodego.visionProxyModel`、`opencodego.visionProxyThinking` 配置图片代理所使用的视觉模型和思考模式。`opencodego.visionProxyThinking` 默认关闭，关闭时内部请求通过 `modelOptions.thinking={ type: false }` / `reasoning_effort="disabled"` 禁用视觉模型思考，最终 OpenAI 兼容请求体发送 `thinking: { type: false }`                                                                                                                                                                                                                                                     |
+| **视觉代理配置**             | 支持通过设置 `opencodego.visionProxyModel`、`opencodego.visionProxyThinking` 配置图片代理所使用的视觉模型和思考模式。`opencodego.visionProxyThinking` 默认关闭，关闭时内部请求通过 `modelOptions.thinking={ type: false }` / `reasoning_effort="disabled"` 禁用视觉模型思考；OpenAI 兼容请求体默认不再发送 `thinking` 字段（按模型 opt-in），禁用通过 `reasoning_effort: "none"`（支持 none 档的模型）或不发送思考参数实现                                                                                                                                                                                                                                                     |
 | **安装欢迎页 (Walkthrough)** | 首次安装且未配置 API Key 时自动打开引导向导，指引用户设置 API Key 和打开语言模型管理器。包含 3 个步骤：设置 API Key、显示模型、高级设置。通过 `onStartupFinished` 激活事件确保在 VS Code 启动后立即检测                                                                                                                                                                                                                                                                                                                                                                                 |
 
 ### 1.3 模型清单
@@ -77,11 +77,15 @@ models.dev 目录通过 `reasoning_options` 字段提供每个模型的思考能
 
 | 目录数据 | 推导结果 | 示例 |
 | -------- | -------- | ---- |
-| `{"type":"effort","values":["high","max"]}` | `switchable`，强度档 `高/极高`（含 `禁用思考`） | deepseek-v4-*、glm-5.2、kimi-k3 (`["max"]`) |
-| `{"type":"effort","values":[...,"none",...]}` | `switchable`，`none` 映射为 `禁用思考` 档 | gpt-5.6-luna（6 档）、hy3 |
-| `{"type":"toggle"}` | `switchable`，仅 `禁用思考/思考` | qwen3.x、minimax-m3 |
-| `reasoning=true` 且 `reasoning_options=[]` | `always`（思考常开，无开关） | glm-5/5.1、kimi-k2.x、mimo 系列 |
-| `{"type":"budget_tokens","max":N}` | `thinking_budget`（OpenAI 模式请求体 `budget_tokens`） | qwen3.5/3.6 (81920)、qwen3.7/3.8 (262144) |
+| `{"type":"effort","values":["high","max"]}`（无 `toggle`，无 `none`） | `switchable`，仅强度档 `高/极高`，**无 `禁用思考` 选项**（模型无法关闭思考） | glm-5.3-flash、glm-5.2、deepseek-v4-*、kimi-k3 (`["max"]`) |
+| `{"type":"effort","values":[...,"none",...]}` | `switchable`，`none` 映射为 `禁用思考` 档（发送 `reasoning_effort: "none"`） | gpt-5.6-luna（6 档）、hy3 |
+| `{"type":"toggle"}` | `switchable`，`禁用思考/思考`；`sendThinkingParam=true`（发送 `thinking` 请求体字段） | qwen3.x、minimax-m3、Zen 免费模型 |
+| `reasoning=true` 且 `reasoning_options=[]` | `always`（思考常开，无开关） | glm-5/5.1、kimi-k2.x、kimi-k2.7-code、mimo 系列 |
+| `{"type":"budget_tokens","max":N}` | `thinking_budget`（`thinking` 请求体内 `budget_tokens`） | qwen3.5/3.6 (81920)、qwen3.7/3.8 (262144) |
+
+> **"禁用思考" 选项可见性规则（2026-09 起）：** 模型选择器仅在模型**确实能关闭思考**时提供 `禁用思考` 档——即目录 effort 列表含 `none`，或 `reasoning_options` 含 `toggle`。仅有 effort 档而无 `none`/`toggle` 的模型（如 glm-5.3-flash、glm-5.2、deepseek-v4-pro、kimi-k2.7-code）只显示强度档；`thinkingMode: "always"` 的模型（含 `MODEL_OVERRIDES` 强制，如 grok-4.5）永不显示 `禁用思考`。
+
+> **OpenAI 模式请求体映射（2026-09 起）：** `thinking` 请求体字段为**按模型 opt-in**——`sendThinkingParam` 默认由目录推导：`reasoning_options` 含 `toggle` 的模型为 `true`（这类上游接受 `thinking` 字段），其余模型默认不发送。OpenCode Go 上游（Console Go）对部分模型使用严格 JSON 解码，未知字段 `thinking` 会被 400 拒绝（`json: unknown field "thinking"`），需要时可用 `MODEL_OVERRIDES` 的 `sendThinkingParam: false` 显式关闭。思考强度通过 `reasoning_effort` 传达：选择"禁用思考"时，目录 effort 列表含 `none` 的模型发送 `reasoning_effort: "none"`，toggle 模型发送 `thinking: { type: "disabled" }`，其余模型不发送任何思考参数（保持模型默认）；开启思考的 toggle 模型发送 `thinking: { type: "enabled" / "adaptive" }`（含 `budget_tokens` 时一并携带）。
 
 > **关于图像输入：** 所有模型（包括非视觉模型）的 `imageInput` 能力均声明为 `true`，以确保 VS Code 始终传递图片数据。非视觉模型通过内部的 `ask_image` 工具代理机制处理图片，不直接支持视觉输入。视觉模型可直接接收工具结果（如内置 `view_image`）返回的图片 data part，以及 MCP 工具返回的 resource-link 图片（解析后发送）。
 
@@ -162,7 +166,7 @@ provideLanguageModelChatResponse(model, messages, options, progress, token)
   │       元数据合并链: MODEL_OVERRIDES > 目录 provider 条目 > 全局目录条目 > 保守默认值
   │
   ├── 2. 应用用户配置的 reasoningEffort
-  │       ├── "disabled" → 关闭思考（always 模型除外）
+  │       ├── "disabled" → 关闭思考（always 模型除外；仅当目录声明 toggle 或含 none 档时可选；OpenAI 模式下 toggle 模型发送 thinking: { type: "disabled" }，含 none 档的模型发送 reasoning_effort: "none"，其余不发送思考参数）
   │       ├── "adaptive" → 开启思考，自动模式（发送 thinking: { type: "adaptive" }）
   │       ├── "enabled" → 开启思考，使用默认推理力度
   │       ├── "high"/"max" → 开启思考，指定推理力度
@@ -491,7 +495,7 @@ scripts/
 ### 4.2 `src/baseProvider.ts`
 
 #### `interface BaseModelItem`
-共享模型配置接口，包含所有 API 实现所需的通用字段：`id`、`displayName`、`baseUrl`、`apiMode`、`context_length`、`max_tokens`/`max_completion_tokens`、`vision`、`reasoning_effort`、`enable_thinking`、`thinking_budget`、`thinkingMode`、`temperature`/`top_p`、`supportsTemperature`、`include_reasoning_in_request`、`headers`、`extra`、`delay` 等。`OpenCodeGoModelItem extends BaseModelItem` 添加 OpenCode Go 专有字段。
+共享模型配置接口，包含所有 API 实现所需的通用字段：`id`、`displayName`、`baseUrl`、`apiMode`、`context_length`、`max_tokens`/`max_completion_tokens`、`vision`、`reasoning_effort`、`enable_thinking`、`thinking_budget`、`sendThinkingParam`（OpenAI 模式 `thinking` 请求体字段 opt-in 开关，默认 = 目录声明 `toggle`）、`supportsNoneEffort`（"禁用思考" 映射为 `reasoning_effort: "none"`）、`thinkingMode`、`temperature`/`top_p`、`supportsTemperature`、`include_reasoning_in_request`、`headers`、`extra`、`delay` 等。`OpenCodeGoModelItem extends BaseModelItem` 添加 OpenCode Go 专有字段。
 
 #### `function reportNativeUsage(usage, progress): void`
 向 Copilot Chat 原生 Token 指示器报告 token 用量。发送 MIME 类型为 `'usage'` 的 `LanguageModelDataPart`（TextEncoder 编码 JSON）。
@@ -661,7 +665,7 @@ Cline Pass Provider 类。通过 OpenAI 兼容的 Chat Completions 端点（`htt
 ### 4.3 `src/catalogModels.ts`
 
 #### `interface ModelMeta`
-解析后的模型元数据。models.dev 可提供的字段全部为**必选**（含保守默认值）：`displayName`、`vision`、`thinkingMode`、`supportedReasoningEfforts`、`defaultReasoningEffort`、`contextLength`、`maxOutputTokens`、`apiMode`、`supportsTemperature`、`toolCalling`、`baseUrl`、`cost`；可选字段：`thinkingBudget`、`status`。
+解析后的模型元数据。models.dev 可提供的字段全部为**必选**（含保守默认值）：`displayName`、`vision`、`thinkingMode`、`supportedReasoningEfforts`、`defaultReasoningEffort`、`contextLength`、`maxOutputTokens`、`apiMode`、`supportsTemperature`、`toolCalling`、`baseUrl`、`sendThinkingParam`（默认 = 目录声明 `toggle`）、`supportsNoneEffort`（目录 effort values 含 `none`）、`thinkingToggle`（目录 `reasoning_options` 含 `toggle`）、`cost`；可选字段：`thinkingBudget`、`status`。
 
 #### `resolveProviderForModelId(modelId): "opencode-go" | "opencode"`
 按模型 ID 分流服务商：`-free` 后缀 → `opencode` (Zen)，否则 → `opencode-go` (Go)。是 Zen/Go 的唯一分流点。
@@ -670,15 +674,15 @@ Cline Pass Provider 类。通过 OpenAI 兼容的 Chat Completions 端点（`htt
 统一合并链：`resolveFromCatalog()`（provider 条目 → 全局条目 → 保守默认值，逐字段兜底）后 `applyOverride()`（`MODEL_OVERRIDES[modelId]` 逐字段覆盖，写了的覆盖、没写的沿用）。
 
 #### `buildCatalogModelInfo(providerId, modelId): LanguageModelChatInformation`
-构建模型选择器条目。Zen 模型名前缀 `[Zen] `，deprecated 模型前缀 `[Depr] `。推理强度枚举由 `buildReasoningEnum()` 生成：effort 列表含 `none` 时映射为 `禁用思考` 档；`defaultReasoningEffort` 不在枚举内时回退到最高档（如 adaptive 模型的 `enabled` → `adaptive`）。
+构建模型选择器条目。Zen 模型名前缀 `[Zen] `，deprecated 模型前缀 `[Depr] `。推理强度枚举由 `buildReasoningEnum()` 生成：仅当目录 effort 列表含 `none` 或 `reasoning_options` 含 `toggle` 时在枚举首位加入 `disabled`（`禁用思考`）档（`thinkingMode: "always"` 的模型永不加入）；`defaultReasoningEffort` 不在枚举内时回退到最高档（如 adaptive 模型的 `enabled` → `adaptive`）。
 
 #### `getCatalogModelConfig(modelId): OpenCodeGoModelItem`
-构建请求配置（provider.ts 与 Git 提交生成共用）。含 `baseUrl`（取自服务商 `api` 字段）、`thinking_budget`（`budget_tokens` 的 max）、`reasoning_effort`（仅真实强度档，`enabled`/`adaptive` 不发送）、`extra`（仅覆盖表）。
+构建请求配置（provider.ts 与 Git 提交生成共用）。含 `baseUrl`（取自服务商 `api` 字段）、`thinking_budget`（`budget_tokens` 的 max）、`reasoning_effort`（仅真实强度档，`enabled`/`adaptive` 不发送）、`sendThinkingParam`（默认 = 目录 `reasoning_options` 含 `toggle`；OpenAI 模式 `thinking` 请求体字段 opt-in 开关）、`supportsNoneEffort`（目录 effort values 含 `none` 时为 `true`，"禁用思考"映射为 `reasoning_effort: "none"`）、`extra`（仅覆盖表）。
 
 ### 4.3b `src/modelOverrides.ts`
 
 #### `interface ModelMetaOverride`
-每模型覆盖项，**全部字段可选**（写什么覆盖什么）。在 `ModelMeta` 基础上额外提供 models.dev 无法表达的字段：`extra`（请求体参数，如 `reasoning_split`）、`thinkingBudget`、`includeReasoningInRequest`。
+每模型覆盖项，**全部字段可选**（写什么覆盖什么）。在 `ModelMeta` 基础上额外提供 models.dev 无法表达的字段：`extra`（请求体参数，如 `reasoning_split`）、`thinkingBudget`、`includeReasoningInRequest`、`sendThinkingParam`（OpenAI 模式 `thinking` 请求体字段 opt-in 开关，默认由目录 toggle 推导）、`supportsNoneEffort`。
 
 #### `const MODEL_OVERRIDES: Record<string, ModelMetaOverride>`
 覆盖表（当前 8 条）：`minimax-m3`（adaptive + anthropic + `reasoning_split`）、`minimax-m2.7`（anthropic + `reasoning_split`）、`minimax-m2.5`（anthropic）、`qwen3.7-max`/`qwen3.7-plus`/`qwen3.6-plus`/`qwen3.5-plus`（anthropic）、`glm-5.2`（默认 effort=high）。Zen 免费模型（`-free` 后缀）共用同一命名空间，需要时可在此追加。
@@ -855,8 +859,8 @@ API 实现的抽象基类。
 #### `getCatalogProviderModelIds(providerId): string[]`
 获取服务商提供的全部模型 ID 列表（未加载时返回空数组）。
 
-#### `inferThinkingMode(entry) / inferReasoningEfforts(entry) / inferDefaultReasoningEffort(entry) / inferVision(entry) / inferThinkingBudget(entry)`
-从目录条目推断：思考模式（`reasoning_options` 非空 → switchable，空但 `reasoning=true` → always）、思考强度列表（`effort` 类型 values）、默认强度（最高档）、视觉能力（`attachment`/`modalities`）、思考预算（`budget_tokens` 的 min/max）。
+#### `inferThinkingMode(entry) / inferReasoningEfforts(entry) / inferDefaultReasoningEffort(entry) / inferThinkingToggle(entry) / inferVision(entry) / inferThinkingBudget(entry)`
+从目录条目推断：思考模式（`reasoning_options` 非空 → switchable，空但 `reasoning=true` → always）、思考强度列表（`effort` 类型 values）、默认强度（最高档）、思考开关（`reasoning_options` 含 `toggle` 类型条目）、视觉能力（`attachment`/`modalities`）、思考预算（`budget_tokens` 的 min/max）。
 
 #### `clearModelsDevCache(): void`
 清除缓存的 models.dev 目录数据（重置 `metadataMap`、`shortIdMap`、`providersMap`、`cacheTimestamp` 和 `lastLoadFailed`）。由 `resetAutoDiscoveryState()` 在强制刷新时调用，确保下次查询重新拉取最新目录。
@@ -1031,7 +1035,7 @@ ask_image 工具定义的 OpenAI 格式（`type: "function"`），包含 `imageI
 从 models.dev 目录提取指定模型的特性报告（默认 `glm-5.1 glm-5.2`，可传任意模型 ID，`--json` 输出机器可读格式）。拉取采用官方 `catalog.json` → 镜像两级回退。输出包含：
 
 - **原始目录条目**：`opencode-go` 服务商专属条目（provider 优先）+ 全局目录条目（`zhipuai/glm-5.1` 等，含 weights/benchmarks）
-- **解析后特性**：与扩展完全一致的推理规则（镜像 `src/modelsDev.ts` / `src/catalogModels.ts`）——思考模式（`reasoning_options` 空 + `reasoning=true` → always，非空 → switchable）、推理强度（effort values，过滤 `none`/`disabled`）、默认强度（最高档，`MODEL_OVERRIDES` 覆盖如 `glm-5.2` → `high`）、视觉、思考预算（`budget_tokens`）、apiMode（`deduceApiModeFromFamily` 同款启发式）、上下文/输出上限、成本等
+- **解析后特性**：与扩展完全一致的推理规则（镜像 `src/modelsDev.ts` / `src/catalogModels.ts`）——思考模式（`reasoning_options` 空 + `reasoning=true` → always，非空 → switchable）、思考开关（`toggle` 条目）、可关闭思考（`canDisable`：toggle 或 effort 含 `none`，且非 always）、强度选择器枚举（`buildReasoningEnum` 同款：仅可关闭时加入 `disabled` 档）、`sendThinkingParam`（默认 = toggle 声明）、推理强度（effort values，过滤 `none`/`disabled`）、默认强度（最高档，`MODEL_OVERRIDES` 覆盖）、视觉、思考预算（`budget_tokens`）、apiMode（含 `MODEL_OVERRIDES` 的 `apiMode` 覆盖，如 grok-4.5 → responses）、上下文/输出上限、成本等
 
 用法：`node scripts/extract-model-features.mjs glm-5.1 glm-5.2`。
 
@@ -1151,7 +1155,7 @@ ask_image 工具定义的 OpenAI 格式（`type: "function"`），包含 `imageI
 将 VS Code 消息转换为 OpenAI 格式（**异步**）。支持文本、图片、工具调用、工具结果、推理内容的消息转换。modelConfig 新增 `vision` 字段，非视觉模型时自动替换图片为文本引用并存储图片数据；**视觉模型时保留工具结果（`LanguageModelToolResultPart`）内的图片 `LanguageModelDataPart`，转换为 `image_url` content 与文本合并为多模态 content 数组发送**（如内置 `view_image` 工具返回的图片）；**MCP 工具返回的 resource-link（`application/vnd.code.resource-link`）data part 会被解析并通过 `resolveResourceLinkToImage()` 读取为实际图片，视觉模型直接发送、非视觉模型存入 `_localImages` 供 `ask_image` 代理使用，解析失败时以文本形式提示 URI**。
 
 #### `prepareRequestBody(rb, um?, options?): Record<string, unknown>`
-构建 OpenAI 请求体。设置 temperature、top_p、max_tokens、reasoning_effort（adaptive 模式时跳过）、thinking 模式（支持 `{ type: "enabled" }`、`{ type: "adaptive" }` 和关闭用 `{ type: false }`）、stop、tools、tool_choice 以及各种惩罚参数和 extra 参数。非视觉模型且存在图片时自动注入 `ask_image` 工具定义。Extra 参数合并前过滤保留键（`model`, `messages`, `stream`, `temperature`, `top_p`, `max_tokens`, `max_completion_tokens`, `tools`, `tool_choice`, `stop`, `reasoning_effort`, `thinking`, `top_k`, `min_p`, `frequency_penalty`, `presence_penalty`, `repetition_penalty`, `stream_options`, `reasoning` 等），冲突时 `logger.warn()` 记录。
+构建 OpenAI 请求体。设置 temperature、top_p、max_tokens、reasoning_effort（adaptive 模式时跳过；含 `"none"` 档用于禁用思考）、thinking 模式（**按模型 opt-in**：仅在 `um.sendThinkingParam === true` 时发送，支持 `{ type: "enabled" }`、`{ type: "adaptive" }` 和 `{ type: "disabled" }`；Console Go 等严格 JSON 上游会以 `json: unknown field "thinking"` 400 拒绝该字段，因此默认不发送）、stop、tools、tool_choice 以及各种惩罚参数和 extra 参数。非视觉模型且存在图片时自动注入 `ask_image` 工具定义。Extra 参数合并前过滤保留键（`model`, `messages`, `stream`, `temperature`, `top_p`, `max_tokens`, `max_completion_tokens`, `tools`, `tool_choice`, `stop`, `reasoning_effort`, `thinking`, `top_k`, `min_p`, `frequency_penalty`, `presence_penalty`, `repetition_penalty`, `stream_options`, `reasoning` 等），冲突时 `logger.warn()` 记录。
 
 #### `processStreamingResponse(responseBody, progress, token): Promise<void>`
 处理 OpenAI SSE 流式响应。逐行解析 `data:` 前缀的 SSE 事件，处理 `[DONE]` 标记，解析 usage 用量信息，委托 `processDelta()`。注册取消回调：`token.onCancellationRequested` 时调用 `reader.cancel()` 立即中断流式读取。在 `finally` 块中 dispose 该回调，防止多次调用 `processStreamingResponse` 时回调累积。

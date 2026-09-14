@@ -10,8 +10,10 @@
  * The report contains the raw catalog entries (provider-specific + global)
  * and the resolved features the extension derives from them via the same
  * inference rules as src/modelsDev.ts / src/catalogModels.ts:
- * thinking mode, reasoning efforts, default effort (incl. overrides from
- * src/modelOverrides.ts), vision, API mode, context/output limits, cost, etc.
+ * thinking mode, thinking toggle, can-disable-thinking, effort picker
+ * options, sendThinkingParam, reasoning efforts, default effort (incl.
+ * overrides from src/modelOverrides.ts), vision, API mode, context/output
+ * limits, cost, etc.
  *
  * Usage:
  *   node scripts/extract-model-features.mjs [modelId...]
@@ -37,8 +39,20 @@ const DEFAULT_MAX_TOKENS = 4096;
  * Keep in sync when the override table changes.
  */
 const MODEL_OVERRIDES = {
-    // GLM-5.2 defaults to "high" instead of the catalog's highest effort "max".
+    // Grok 4.5 always reasons; the Responses API does not support disabling it.
+    "grok-4.5": { apiMode: "responses", thinkingMode: "always" },
+    // MiniMax series — served via Anthropic-compatible API; M3 is adaptive-only
+    "minimax-m3": { thinkingMode: "adaptive", apiMode: "anthropic", extra: { reasoning_split: true } },
+    "minimax-m2.7": { apiMode: "anthropic", extra: { reasoning_split: true } },
+    "minimax-m2.5": { apiMode: "anthropic" },
+    // Qwen series — served via Anthropic-compatible API
+    "qwen3.7-max": { apiMode: "anthropic" },
+    "qwen3.7-plus": { apiMode: "anthropic" },
+    "qwen3.6-plus": { apiMode: "anthropic" },
+    "qwen3.5-plus": { apiMode: "anthropic" },
+    // GLM — keep default effort at "high" instead of the catalog's "max"
     "glm-5.2": { defaultReasoningEffort: "high" },
+    "z-ai/glm-5.3-flash": { thinkingMode: "always", defaultReasoningEffort: "max" },
 };
 
 // ── Fetching ──
@@ -93,12 +107,28 @@ function findGlobalEntry(models, modelId) {
  * - reasoning missing/false          → "always" (no thinking at all)
  * - reasoning_options empty/missing  → "always" (thinking always on)
  * - reasoning_options present        → "switchable"
+ *
+ * NOTE: "switchable" only means effort levels are selectable — it does NOT
+ * imply thinking can be turned off. Disable support is decided by
+ * inferThinkingToggle + the "none" effort value (see canDisableThinking).
  */
 function inferThinkingMode(entry) {
     if (!entry?.reasoning) return "always";
     const opts = entry.reasoning_options;
     if (!opts || opts.length === 0) return "always";
     return "switchable";
+}
+
+/**
+ * Whether the entry declares a thinking on/off toggle
+ * (`reasoning_options` containing a `{"type":"toggle"}` option).
+ * Toggle models accept the `thinking` body param ({type: enabled/disabled}).
+ * (Mirror of inferThinkingToggle in src/modelsDev.ts.)
+ */
+function inferThinkingToggle(entry) {
+    const opts = entry?.reasoning_options;
+    if (!opts) return false;
+    return opts.some((opt) => opt.type === "toggle");
 }
 
 /** Explicit effort values from a `{"type":"effort","values":[...]}` option. */
@@ -160,6 +190,33 @@ function deduceApiMode(modelId, entry) {
 // ── Feature resolution ──
 
 /**
+ * Whether the model can actually turn thinking off — drives the "disabled"
+ * (禁用思考) picker option. True only when the catalog effort list contains
+ * "none" or a toggle is declared, and the model is not "always"-thinking.
+ * (Mirror of buildReasoningEnum's canDisable in src/catalogModels.ts.)
+ */
+function canDisableThinking({ thinkingMode, thinkingToggle, supportsNoneEffort }) {
+    return (thinkingToggle || supportsNoneEffort) && thinkingMode !== "always";
+}
+
+/**
+ * Effort picker enum the extension offers (mirror of buildReasoningEnum):
+ * "disabled" is prepended only when thinking can actually be disabled.
+ */
+function buildEffortPickerOptions({ thinkingMode, efforts, canDisable }) {
+    if (efforts.length > 0) {
+        return canDisable ? ["disabled", ...efforts] : [...efforts];
+    }
+    if (thinkingMode === "switchable") {
+        return canDisable ? ["disabled", "enabled"] : ["enabled"];
+    }
+    if (thinkingMode === "adaptive") {
+        return ["disabled", "adaptive"];
+    }
+    return ["enabled"];
+}
+
+/**
  * Resolve the full feature set for one model.
  * Merge chain (mirror resolveModelMeta): provider entry → global entry →
  * conservative defaults, then apply overrides.
@@ -174,6 +231,20 @@ function resolveFeatures(modelId, providerEntry, globalEntry, provider) {
         (e) => e !== "none" && e !== "disabled"
     );
 
+    const thinkingToggle = inferThinkingToggle(entry);
+    const supportsNoneEffort = (rawEfforts ?? []).includes("none");
+    const thinkingMode = override.thinkingMode ?? inferThinkingMode(entry);
+    const canDisable = canDisableThinking({ thinkingMode, thinkingToggle, supportsNoneEffort });
+    const effortPickerOptions = buildEffortPickerOptions({
+        thinkingMode,
+        efforts: supportedReasoningEfforts,
+        canDisable,
+    });
+    // OpenAI "thinking" body param opt-in: only toggle-declaring models send it
+    // (strict upstreams reject the unknown field with HTTP 400). (Mirror of
+    // resolveFromCatalog in src/catalogModels.ts.)
+    const sendThinkingParam = override.sendThinkingParam ?? thinkingToggle;
+
     return {
         modelId,
         displayName: entry?.name ?? modelId,
@@ -182,11 +253,16 @@ function resolveFeatures(modelId, providerEntry, globalEntry, provider) {
         provider: PROVIDER_ID,
         providerName: provider?.name,
         providerApiBaseUrl: provider?.api ? provider.api.replace(/\/+$/, "") + "/" : undefined,
-        apiMode: deduceApiMode(modelId, entry),
+        apiMode: override.apiMode ?? deduceApiMode(modelId, entry),
         contextLength: entry?.limit?.context ?? DEFAULT_CONTEXT_LENGTH,
         maxOutputTokens: entry?.limit?.output ?? DEFAULT_MAX_TOKENS,
         vision: inferVision(entry),
-        thinkingMode: inferThinkingMode(entry),
+        thinkingMode,
+        thinkingToggle,
+        supportsNoneEffort,
+        canDisable,
+        effortPickerOptions,
+        sendThinkingParam,
         supportedReasoningEfforts,
         defaultReasoningEffort:
             override.defaultReasoningEffort ?? inferDefaultReasoningEffort(entry),
@@ -237,14 +313,33 @@ function printReport(features) {
         ["Context length", `${formatNumber(features.contextLength)} tokens`],
         ["Max output tokens", `${formatNumber(features.maxOutputTokens)} tokens`],
         ["Vision", features.vision ? "yes" : "no"],
-        ["Thinking mode", features.thinkingMode],
+        [
+            "Thinking mode",
+            features.thinkingMode === "switchable" && !features.canDisable
+                ? "switchable (thinking cannot be disabled — effort levels only)"
+                : features.thinkingMode,
+        ],
+        [
+            "Can disable thinking",
+            features.canDisable
+                ? `yes (${features.thinkingToggle ? "thinking body param" : "reasoning_effort: none"})`
+                : "no",
+        ],
         [
             "Reasoning efforts",
             features.supportedReasoningEfforts.length > 0
                 ? features.supportedReasoningEfforts.join(", ")
                 : "(none — simple on/off)",
         ],
+        [
+            "Effort picker options",
+            features.effortPickerOptions.length > 0 ? features.effortPickerOptions.join(", ") : "n/a",
+        ],
         ["Default effort", features.defaultReasoningEffort],
+        [
+            "Sends thinking param",
+            features.sendThinkingParam ? "yes (toggle declared)" : "no (effort via reasoning_effort)",
+        ],
         [
             "Thinking budget",
             features.thinkingBudget

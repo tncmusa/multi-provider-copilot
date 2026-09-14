@@ -89,9 +89,22 @@ export class OpenCodeGoChatModelProvider extends BaseChatModelProvider<OpenCodeG
         if (effort) {
             if (effort === "disabled") {
                 if (um.thinkingMode !== "always") {
-                    um.enable_thinking = false;
                     um.include_reasoning_in_request = false;
-                    um.reasoning_effort = undefined;
+                    if (um.sendThinkingParam === true) {
+                        // Models that declare support for the "thinking" body param
+                        // disable thinking via thinking: { type: "disabled" }
+                        um.enable_thinking = false;
+                        um.reasoning_effort = undefined;
+                    } else if (um.supportsNoneEffort === true && (um.apiMode ?? "openai") === "openai") {
+                        // Disable thinking via the catalog-provided "none" reasoning effort
+                        // (enable_thinking stays true so reasoning_effort is sent)
+                        um.enable_thinking = true;
+                        um.reasoning_effort = "none";
+                    } else {
+                        // No disable mechanism for this model — leave the model default
+                        um.enable_thinking = false;
+                        um.reasoning_effort = undefined;
+                    }
                 } else {
                     // Grok 4.5 requires thinking; never send a disabled
                     // reasoning setting even if an older client requests it.

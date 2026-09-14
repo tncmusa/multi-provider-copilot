@@ -47,6 +47,10 @@ export interface BaseModelItem {
     reasoning_effort?: string;
     enable_thinking?: boolean;
     thinking_budget?: number;
+    /** Opt-in: send the OpenAI "thinking" body param ({type: enabled/disabled/adaptive}). Default off — strict upstreams (e.g. OpenCode Go Console Go) reject the unknown field "thinking" with HTTP 400. */
+    sendThinkingParam?: boolean;
+    /** Whether the catalog exposes a "none" reasoning effort, used to disable thinking via reasoning_effort on OpenAI-compatible endpoints */
+    supportsNoneEffort?: boolean;
     /** Whether this model supports switching thinking on/off ("switchable"), always has it ("always"), or only disabled/adaptive ("adaptive") */
     thinkingMode?: "switchable" | "always" | "adaptive";
     temperature?: number | null;
