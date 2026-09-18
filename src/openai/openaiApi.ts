@@ -116,7 +116,12 @@ export class OpenaiApi extends CommonApi<OpenAIChatMessage, Record<string, unkno
             const textParts: string[] = [];
             const imageParts: vscode.LanguageModelDataPart[] = [];
             const toolCalls: OpenAIToolCall[] = [];
-            const toolResults: { callId: string; content: string | ChatMessageContent[] }[] = [];
+            const toolResults: { callId: string; content: string }[] = [];
+            // Images extracted from tool results. OpenAI-compatible upstreams
+            // (e.g. Console Go) require `tool` message content to be a plain
+            // string and reject multimodal arrays with 422 ("tool.content.str"),
+            // so images are moved into a follow-up user message instead.
+            const toolResultImages: ChatMessageContent[] = [];
             const reasoningParts: string[] = [];
             const visionToolHistory: VisionToolHistoryEntry[] = [];
 
@@ -209,14 +214,16 @@ export class OpenaiApi extends CommonApi<OpenAIChatMessage, Record<string, unkno
                         }
                     }
                     const joinedText = toolTexts.join("\n").trim();
-                    let content: string | ChatMessageContent[];
+                    let content: string;
                     if (toolImages.length > 0) {
-                        const parts: ChatMessageContent[] = [];
-                        if (joinedText) {
-                            parts.push({ type: "text", text: joinedText });
-                        }
-                        parts.push(...toolImages);
-                        content = parts;
+                        // Vision models would normally receive image_url blocks
+                        // inside the tool message, but OpenAI-compatible upstreams
+                        // (Console Go) only accept string content for `tool`
+                        // messages (422 "tool.content.str"). Attach the images in
+                        // a follow-up user message instead and reference it here.
+                        toolResultImages.push(...toolImages);
+                        const note = `\n[The tool returned ${toolImages.length} image(s). They are attached in the next user message.]`;
+                        content = (joinedText ? joinedText + note : `[The tool returned ${toolImages.length} image(s). They are attached in the next user message.]`).trim();
                     } else {
                         content = joinedText;
                     }
@@ -269,6 +276,18 @@ export class OpenaiApi extends CommonApi<OpenAIChatMessage, Record<string, unkno
             // process tool result messages
             for (const tr of toolResults) {
                 out.push({ role: "tool", tool_call_id: tr.callId, content: tr.content || "" });
+            }
+            // Emit images extracted from tool results as a user message right
+            // after the tool messages, so vision models can still see them
+            // while `tool` content remains a plain string.
+            if (toolResultImages.length > 0) {
+                out.push({
+                    role: "user",
+                    content: [
+                        { type: "text", text: "[Image(s) returned by the tool calls above:]" },
+                        ...toolResultImages,
+                    ],
+                });
             }
 
             // process user messages
